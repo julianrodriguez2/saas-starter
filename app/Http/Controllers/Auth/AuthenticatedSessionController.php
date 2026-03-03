@@ -33,6 +33,17 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
+        $organizationId = $request->user()
+            ?->organizations()
+            ->orderBy('organizations.created_at')
+            ->value('organizations.id');
+
+        if ($organizationId !== null) {
+            $request->session()->put('organization_id', $organizationId);
+        } else {
+            $request->session()->forget('organization_id');
+        }
+
         return redirect()->intended(route('dashboard', absolute: false));
     }
 

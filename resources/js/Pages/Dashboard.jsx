@@ -29,7 +29,7 @@ export default function Dashboard() {
                                 </span>{' '}
                                 {currentOrganization?.name ?? 'No organization selected'}
                             </p>
-                            <p>Multi-Tenant SaaS Starter {'\u2014'} Increment 1</p>
+                            <p>Multi-Tenant SaaS Starter {'\u2014'} Increment 2</p>
                         </div>
                     </div>
                 </div>

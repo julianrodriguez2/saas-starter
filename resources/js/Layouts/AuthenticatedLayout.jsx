@@ -6,7 +6,10 @@ import { Link, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 
 export default function AuthenticatedLayout({ header, children }) {
-    const user = usePage().props.auth.user;
+    const { auth, organization } = usePage().props;
+    const user = auth.user;
+    const organizations = organization?.all ?? [];
+    const currentOrganization = organization?.current;
 
     const [showingNavigationDropdown, setShowingNavigationDropdown] =
         useState(false);
@@ -30,10 +33,62 @@ export default function AuthenticatedLayout({ header, children }) {
                                 >
                                     Dashboard
                                 </NavLink>
+                                <NavLink
+                                    href={route('organizations.settings')}
+                                    active={route().current('organizations.settings')}
+                                >
+                                    Organization Settings
+                                </NavLink>
                             </div>
                         </div>
 
                         <div className="hidden sm:ms-6 sm:flex sm:items-center">
+                            <div className="relative ms-3">
+                                <Dropdown>
+                                    <Dropdown.Trigger>
+                                        <span className="inline-flex rounded-md">
+                                            <button
+                                                type="button"
+                                                className="inline-flex items-center rounded-md border border-gray-300 bg-white px-3 py-2 text-sm font-medium leading-4 text-gray-700 transition duration-150 ease-in-out hover:bg-gray-50 focus:outline-none dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
+                                            >
+                                                {currentOrganization?.name ??
+                                                    'Select Organization'}
+                                                <svg
+                                                    className="-me-0.5 ms-2 h-4 w-4"
+                                                    xmlns="http://www.w3.org/2000/svg"
+                                                    viewBox="0 0 20 20"
+                                                    fill="currentColor"
+                                                >
+                                                    <path
+                                                        fillRule="evenodd"
+                                                        d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                                        clipRule="evenodd"
+                                                    />
+                                                </svg>
+                                            </button>
+                                        </span>
+                                    </Dropdown.Trigger>
+                                    <Dropdown.Content>
+                                        {organizations.map((org) => (
+                                            <Dropdown.Link
+                                                key={org.id}
+                                                href={route('organizations.switch')}
+                                                method="post"
+                                                as="button"
+                                                data={{ organization_id: org.id }}
+                                                className={
+                                                    currentOrganization?.id === org.id
+                                                        ? 'bg-gray-100 dark:bg-gray-800'
+                                                        : ''
+                                                }
+                                            >
+                                                {org.name}
+                                            </Dropdown.Link>
+                                        ))}
+                                    </Dropdown.Content>
+                                </Dropdown>
+                            </div>
+
                             <div className="relative ms-3">
                                 <Dropdown>
                                     <Dropdown.Trigger>
@@ -134,6 +189,12 @@ export default function AuthenticatedLayout({ header, children }) {
                         >
                             Dashboard
                         </ResponsiveNavLink>
+                        <ResponsiveNavLink
+                            href={route('organizations.settings')}
+                            active={route().current('organizations.settings')}
+                        >
+                            Organization Settings
+                        </ResponsiveNavLink>
                     </div>
 
                     <div className="border-t border-gray-200 pb-1 pt-4 dark:border-gray-600">
@@ -147,6 +208,17 @@ export default function AuthenticatedLayout({ header, children }) {
                         </div>
 
                         <div className="mt-3 space-y-1">
+                            {organizations.map((org) => (
+                                <ResponsiveNavLink
+                                    key={org.id}
+                                    method="post"
+                                    href={route('organizations.switch')}
+                                    data={{ organization_id: org.id }}
+                                    as="button"
+                                >
+                                    {org.name}
+                                </ResponsiveNavLink>
+                            ))}
                             <ResponsiveNavLink href={route('profile.edit')}>
                                 Profile
                             </ResponsiveNavLink>

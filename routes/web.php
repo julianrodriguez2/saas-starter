@@ -1,6 +1,9 @@
 <?php
 
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\OrganizationController;
+use App\Http\Controllers\OrganizationSettingsController;
+use App\Http\Controllers\OrganizationSwitchController;
 use Illuminate\Foundation\Application;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -14,14 +17,28 @@ Route::get('/', function () {
     ]);
 });
 
-Route::get('/dashboard', function () {
-    return Inertia::render('Dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
-
 Route::middleware('auth')->group(function () {
+    Route::get('/organizations/create', [OrganizationController::class, 'create'])
+        ->name('organizations.create');
+
+    Route::post('/organizations', [OrganizationController::class, 'store'])
+        ->name('organizations.store');
+
+    Route::post('/organizations/switch', OrganizationSwitchController::class)
+        ->name('organizations.switch');
+
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
+});
+
+Route::middleware(['auth', 'resolve.organization'])->group(function () {
+    Route::get('/dashboard', function () {
+        return Inertia::render('Dashboard');
+    })->name('dashboard');
+
+    Route::get('/organizations/settings', OrganizationSettingsController::class)
+        ->name('organizations.settings');
 });
 
 require __DIR__.'/auth.php';

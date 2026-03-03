@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\Organization;
 use App\Support\CurrentOrganization;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -30,7 +31,43 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
-        $currentOrganization = app(CurrentOrganization::class);
+        $currentOrganization = app()->bound(CurrentOrganization::class)
+            ? app(CurrentOrganization::class)
+            : new CurrentOrganization();
+
+        if ($request->user() === null) {
+            $organizations = [];
+        } else {
+            $memberOrganizations = $request->user()
+                ->organizations()
+                ->select('organizations.id', 'organizations.name')
+                ->get()
+                ->mapWithKeys(fn (Organization $organization): array => [
+                    $organization->id => [
+                        'id' => $organization->id,
+                        'name' => $organization->name,
+                        'role' => $organization->pivot?->role ?? 'member',
+                    ],
+                ]);
+
+            $ownedOrganizations = $request->user()
+                ->ownedOrganizations()
+                ->select('organizations.id', 'organizations.name')
+                ->get()
+                ->mapWithKeys(fn (Organization $organization): array => [
+                    $organization->id => [
+                        'id' => $organization->id,
+                        'name' => $organization->name,
+                        'role' => 'owner',
+                    ],
+                ]);
+
+            $organizations = $memberOrganizations
+                ->union($ownedOrganizations)
+                ->sortBy('name')
+                ->values()
+                ->all();
+        }
 
         return [
             ...parent::share($request),
@@ -39,6 +76,7 @@ class HandleInertiaRequests extends Middleware
             ],
             'organization' => [
                 'current' => $currentOrganization->toArray(),
+                'all' => $organizations,
             ],
         ];
     }
