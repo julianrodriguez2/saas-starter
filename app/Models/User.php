@@ -60,4 +60,38 @@ class User extends Authenticatable
     {
         return $this->hasMany(Organization::class, 'owner_id');
     }
+
+    public function roleInOrganization(Organization|string|null $organization): ?string
+    {
+        $organizationId = $organization instanceof Organization
+            ? $organization->getKey()
+            : $organization;
+
+        if (! is_string($organizationId) || $organizationId === '') {
+            return null;
+        }
+
+        if ($this->ownedOrganizations()->whereKey($organizationId)->exists()) {
+            return OrganizationUser::ROLE_OWNER;
+        }
+
+        return $this->organizations()
+            ->whereKey($organizationId)
+            ->value('organization_user.role');
+    }
+
+    public function isOwner(Organization|string|null $organization): bool
+    {
+        return $this->roleInOrganization($organization) === OrganizationUser::ROLE_OWNER;
+    }
+
+    public function isAdmin(Organization|string|null $organization): bool
+    {
+        return $this->roleInOrganization($organization) === OrganizationUser::ROLE_ADMIN;
+    }
+
+    public function belongsToOrganization(Organization|string|null $organization): bool
+    {
+        return $this->roleInOrganization($organization) !== null;
+    }
 }

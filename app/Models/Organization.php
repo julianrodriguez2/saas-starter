@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -48,6 +49,27 @@ class Organization extends Model
             ->withTimestamps();
     }
 
+    public function owners(): BelongsToMany
+    {
+        return $this->users()
+            ->where(function (Builder $query) {
+                $query->where('organization_user.role', OrganizationUser::ROLE_OWNER)
+                    ->orWhere('users.id', $this->owner_id);
+            });
+    }
+
+    public function admins(): BelongsToMany
+    {
+        return $this->users()
+            ->wherePivot('role', OrganizationUser::ROLE_ADMIN);
+    }
+
+    public function members(): BelongsToMany
+    {
+        return $this->users()
+            ->wherePivot('role', OrganizationUser::ROLE_MEMBER);
+    }
+
     public function owner(): BelongsTo
     {
         return $this->belongsTo(User::class, 'owner_id');
@@ -66,5 +88,10 @@ class Organization extends Model
     public function auditLogs(): HasMany
     {
         return $this->hasMany(AuditLog::class);
+    }
+
+    public function invites(): HasMany
+    {
+        return $this->hasMany(Invite::class);
     }
 }

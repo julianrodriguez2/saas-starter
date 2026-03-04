@@ -34,6 +34,13 @@ class HandleInertiaRequests extends Middleware
         $currentOrganization = app()->bound(CurrentOrganization::class)
             ? app(CurrentOrganization::class)
             : new CurrentOrganization();
+        $currentOrganizationPayload = $currentOrganization->toArray();
+
+        if ($currentOrganizationPayload !== null && $request->user() !== null) {
+            $currentOrganizationPayload['role'] = $request->user()->roleInOrganization(
+                $currentOrganization->organization
+            );
+        }
 
         if ($request->user() === null) {
             $organizations = [];
@@ -75,7 +82,7 @@ class HandleInertiaRequests extends Middleware
                 'user' => $request->user(),
             ],
             'organization' => [
-                'current' => $currentOrganization->toArray(),
+                'current' => $currentOrganizationPayload,
                 'all' => $organizations,
             ],
         ];
