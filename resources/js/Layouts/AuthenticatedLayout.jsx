@@ -10,6 +10,9 @@ export default function AuthenticatedLayout({ header, children }) {
     const user = auth.user;
     const organizations = organization?.all ?? [];
     const currentOrganization = organization?.current;
+    const canManageMembers =
+        currentOrganization?.role === 'owner' ||
+        currentOrganization?.role === 'admin';
 
     const [showingNavigationDropdown, setShowingNavigationDropdown] =
         useState(false);
@@ -39,6 +42,14 @@ export default function AuthenticatedLayout({ header, children }) {
                                 >
                                     Organization Settings
                                 </NavLink>
+                                {canManageMembers && (
+                                    <NavLink
+                                        href={route('organizations.members.index')}
+                                        active={route().current('organizations.members.*')}
+                                    >
+                                        Members
+                                    </NavLink>
+                                )}
                             </div>
                         </div>
 
@@ -195,6 +206,14 @@ export default function AuthenticatedLayout({ header, children }) {
                         >
                             Organization Settings
                         </ResponsiveNavLink>
+                        {canManageMembers && (
+                            <ResponsiveNavLink
+                                href={route('organizations.members.index')}
+                                active={route().current('organizations.members.*')}
+                            >
+                                Members
+                            </ResponsiveNavLink>
+                        )}
                     </div>
 
                     <div className="border-t border-gray-200 pb-1 pt-4 dark:border-gray-600">

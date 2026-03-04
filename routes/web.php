@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\OrganizationController;
+use App\Http\Controllers\OrganizationMemberController;
 use App\Http\Controllers\OrganizationSettingsController;
 use App\Http\Controllers\OrganizationSwitchController;
 use Illuminate\Foundation\Application;
@@ -39,6 +40,20 @@ Route::middleware(['auth', 'resolve.organization'])->group(function () {
 
     Route::get('/organizations/settings', OrganizationSettingsController::class)
         ->name('organizations.settings');
+});
+
+Route::middleware(['auth', 'resolve.organization', 'org.role:admin'])->group(function () {
+    Route::get('/organizations/members', [OrganizationMemberController::class, 'index'])
+        ->name('organizations.members.index');
+
+    Route::post('/organizations/members/invite', [OrganizationMemberController::class, 'invite'])
+        ->name('organizations.members.invite');
+
+    Route::delete('/organizations/members/{user}', [OrganizationMemberController::class, 'destroy'])
+        ->name('organizations.members.destroy');
+
+    Route::patch('/organizations/members/{user}/role', [OrganizationMemberController::class, 'updateRole'])
+        ->name('organizations.members.update-role');
 });
 
 require __DIR__.'/auth.php';
