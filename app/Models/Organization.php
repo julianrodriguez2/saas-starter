@@ -31,6 +31,19 @@ class Organization extends Model
         'trial_ends_at',
     ];
 
+    protected static function booted(): void
+    {
+        static::creating(function (Organization $organization): void {
+            if ($organization->plan_id !== null) {
+                return;
+            }
+
+            $organization->plan_id = Plan::query()
+                ->where('name', 'Free')
+                ->value('id');
+        });
+    }
+
     /**
      * @return array<string, string>
      */

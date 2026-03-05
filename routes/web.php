@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\BillingPlanController;
 use App\Http\Controllers\OrganizationController;
 use App\Http\Controllers\OrganizationMemberController;
 use App\Http\Controllers\OrganizationSettingsController;
@@ -40,6 +41,9 @@ Route::middleware(['auth', 'resolve.organization'])->group(function () {
 
     Route::get('/organizations/settings', OrganizationSettingsController::class)
         ->name('organizations.settings');
+
+    Route::get('/billing/plan', BillingPlanController::class)
+        ->name('billing.plan');
 });
 
 Route::middleware(['auth', 'resolve.organization', 'org.role:admin'])->group(function () {

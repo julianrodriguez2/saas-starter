@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers;
 
+use App\Exceptions\EntitlementLimitExceededException;
 use App\Models\Invite;
 use App\Models\Organization;
 use App\Models\OrganizationUser;
 use App\Models\User;
+use App\Services\EntitlementService;
 use App\Support\CurrentOrganization;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -71,7 +73,11 @@ class OrganizationMemberController extends Controller
         ]);
     }
 
-    public function invite(Request $request, CurrentOrganization $currentOrganization): RedirectResponse
+    public function invite(
+        Request $request,
+        CurrentOrganization $currentOrganization,
+        EntitlementService $entitlementService
+    ): RedirectResponse
     {
         $organization = $this->resolveOrganization($currentOrganization);
 
@@ -93,6 +99,23 @@ class OrganizationMemberController extends Controller
         $existingUser = User::query()
             ->whereRaw('lower(email) = ?', [$email])
             ->first();
+
+        $willAddMember = $existingUser === null
+            || ! $existingUser->belongsToOrganization($organization);
+
+        if ($willAddMember) {
+            try {
+                $entitlementService->checkLimit(
+                    $organization,
+                    'team_members',
+                    $this->currentMemberCount($organization) + 1
+                );
+            } catch (EntitlementLimitExceededException) {
+                return redirect()->back()->withErrors([
+                    'email' => 'Team member limit reached for your current plan.',
+                ]);
+            }
+        }
 
         if ($existingUser !== null) {
             if ($organization->owner_id === $existingUser->id) {
@@ -214,5 +237,16 @@ class OrganizationMemberController extends Controller
         abort_if($organization === null, 404);
 
         return $organization;
+    }
+
+    private function currentMemberCount(Organization $organization): int
+    {
+        $count = (int) $organization->users()->count();
+
+        $ownerIncluded = $organization->users()
+            ->where('users.id', $organization->owner_id)
+            ->exists();
+
+        return $ownerIncluded ? $count : $count + 1;
     }
 }
