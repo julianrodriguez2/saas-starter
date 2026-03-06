@@ -19,6 +19,12 @@ class ResolveOrganizationFromSession
         $organizationId = $request->session()->get('organization_id');
 
         if (! is_string($organizationId) || $organizationId === '') {
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'message' => 'Organization context is required.',
+                ], 422);
+            }
+
             return redirect()->route('organizations.create');
         }
 
@@ -36,6 +42,13 @@ class ResolveOrganizationFromSession
 
         if ($organization === null) {
             $request->session()->forget('organization_id');
+
+            if ($request->expectsJson() || $request->is('api/*')) {
+                return response()->json([
+                    'message' => 'You do not belong to the selected organization.',
+                ], 403);
+            }
+
             abort(403);
         }
 

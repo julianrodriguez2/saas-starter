@@ -17,6 +17,7 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             PlanSeeder::class,
+            // UsageEventDemoSeeder::class, // Optional: enable for local usage dashboard demo data.
         ]);
 
         // User::factory(10)->create();

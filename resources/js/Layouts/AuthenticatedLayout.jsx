@@ -48,6 +48,12 @@ export default function AuthenticatedLayout({ header, children }) {
                                 >
                                     Billing
                                 </NavLink>
+                                <NavLink
+                                    href={route('usage.index')}
+                                    active={route().current('usage.*')}
+                                >
+                                    Usage
+                                </NavLink>
                                 {canManageMembers && (
                                     <NavLink
                                         href={route('organizations.members.index')}
@@ -217,6 +223,12 @@ export default function AuthenticatedLayout({ header, children }) {
                             active={route().current('billing.*')}
                         >
                             Billing
+                        </ResponsiveNavLink>
+                        <ResponsiveNavLink
+                            href={route('usage.index')}
+                            active={route().current('usage.*')}
+                        >
+                            Usage
                         </ResponsiveNavLink>
                         {canManageMembers && (
                             <ResponsiveNavLink

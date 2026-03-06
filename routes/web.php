@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\V1\UsageEventApiController;
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\OrganizationController;
 use App\Http\Controllers\OrganizationMemberController;
@@ -7,6 +8,7 @@ use App\Http\Controllers\OrganizationSettingsController;
 use App\Http\Controllers\OrganizationSwitchController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\StripeWebhookController;
+use App\Http\Controllers\UsageController;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Route;
@@ -61,6 +63,9 @@ Route::middleware(['auth', 'resolve.organization'])->group(function () {
 
     Route::get('/billing/checkout/cancel', [BillingController::class, 'checkoutCancel'])
         ->name('billing.checkout.cancel');
+
+    Route::get('/usage', [UsageController::class, 'index'])
+        ->name('usage.index');
 });
 
 Route::middleware(['auth', 'resolve.organization', 'org.role:admin'])->group(function () {
@@ -81,6 +86,16 @@ Route::middleware(['auth', 'resolve.organization', 'org.role:admin'])->group(fun
 
     Route::post('/billing/portal', [BillingController::class, 'portal'])
         ->name('billing.portal');
+
+    Route::post('/usage/test-record', [UsageController::class, 'testRecord'])
+        ->name('usage.test-record');
+});
+
+Route::middleware(['auth', 'resolve.organization'])
+    ->prefix('api/v1')
+    ->group(function () {
+        Route::post('/usage-events', [UsageEventApiController::class, 'store'])
+            ->name('api.v1.usage-events.store');
 });
 
 require __DIR__.'/auth.php';

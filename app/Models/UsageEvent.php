@@ -27,6 +27,7 @@ class UsageEvent extends Model
     protected function casts(): array
     {
         return [
+            'quantity' => 'integer',
             'metadata' => 'array',
             'recorded_at' => 'datetime',
         ];
