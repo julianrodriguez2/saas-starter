@@ -52,7 +52,7 @@ class OrganizationMemberController extends Controller
         }
 
         return Inertia::render('Organizations/Members', [
-            'organization' => [
+            'membersOrganization' => [
                 'id' => $organization->id,
                 'name' => $organization->name,
             ],

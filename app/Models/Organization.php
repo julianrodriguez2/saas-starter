@@ -9,11 +9,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Laravel\Cashier\Billable;
 
 class Organization extends Model
 {
     use HasFactory;
     use HasUuids;
+    use Billable;
 
     public $incrementing = false;
 
@@ -24,6 +26,9 @@ class Organization extends Model
      */
     protected $fillable = [
         'name',
+        'stripe_id',
+        'pm_type',
+        'pm_last_four',
         'owner_id',
         'stripe_customer_id',
         'stripe_subscription_id',
@@ -106,5 +111,15 @@ class Organization extends Model
     public function invites(): HasMany
     {
         return $this->hasMany(Invite::class);
+    }
+
+    public function stripeName(): string
+    {
+        return $this->name;
+    }
+
+    public function stripeEmail(): ?string
+    {
+        return $this->owner?->email;
     }
 }

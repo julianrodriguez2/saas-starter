@@ -43,8 +43,8 @@ export default function AuthenticatedLayout({ header, children }) {
                                     Organization Settings
                                 </NavLink>
                                 <NavLink
-                                    href={route('billing.plan')}
-                                    active={route().current('billing.plan')}
+                                    href={route('billing.index')}
+                                    active={route().current('billing.*')}
                                 >
                                     Billing
                                 </NavLink>
@@ -213,8 +213,8 @@ export default function AuthenticatedLayout({ header, children }) {
                             Organization Settings
                         </ResponsiveNavLink>
                         <ResponsiveNavLink
-                            href={route('billing.plan')}
-                            active={route().current('billing.plan')}
+                            href={route('billing.index')}
+                            active={route().current('billing.*')}
                         >
                             Billing
                         </ResponsiveNavLink>

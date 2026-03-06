@@ -1,14 +1,17 @@
 <?php
 
-use App\Http\Controllers\ProfileController;
-use App\Http\Controllers\BillingPlanController;
+use App\Http\Controllers\BillingController;
 use App\Http\Controllers\OrganizationController;
 use App\Http\Controllers\OrganizationMemberController;
 use App\Http\Controllers\OrganizationSettingsController;
 use App\Http\Controllers\OrganizationSwitchController;
+use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\StripeWebhookController;
 use Illuminate\Foundation\Application;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
+use Laravel\Cashier\Http\Middleware\VerifyWebhookSignature;
 
 Route::get('/', function () {
     return Inertia::render('Welcome', [
@@ -18,6 +21,11 @@ Route::get('/', function () {
         'phpVersion' => PHP_VERSION,
     ]);
 });
+
+Route::post('/stripe/webhook', [StripeWebhookController::class, 'handleWebhook'])
+    ->middleware(VerifyWebhookSignature::class)
+    ->withoutMiddleware(ValidateCsrfToken::class)
+    ->name('stripe.webhook');
 
 Route::middleware('auth')->group(function () {
     Route::get('/organizations/create', [OrganizationController::class, 'create'])
@@ -42,8 +50,17 @@ Route::middleware(['auth', 'resolve.organization'])->group(function () {
     Route::get('/organizations/settings', OrganizationSettingsController::class)
         ->name('organizations.settings');
 
-    Route::get('/billing/plan', BillingPlanController::class)
+    Route::get('/billing', [BillingController::class, 'index'])
+        ->name('billing.index');
+
+    Route::redirect('/billing/plan', '/billing')
         ->name('billing.plan');
+
+    Route::get('/billing/checkout/success', [BillingController::class, 'checkoutSuccess'])
+        ->name('billing.checkout.success');
+
+    Route::get('/billing/checkout/cancel', [BillingController::class, 'checkoutCancel'])
+        ->name('billing.checkout.cancel');
 });
 
 Route::middleware(['auth', 'resolve.organization', 'org.role:admin'])->group(function () {
@@ -58,6 +75,12 @@ Route::middleware(['auth', 'resolve.organization', 'org.role:admin'])->group(fun
 
     Route::patch('/organizations/members/{user}/role', [OrganizationMemberController::class, 'updateRole'])
         ->name('organizations.members.update-role');
+
+    Route::post('/billing/checkout/{plan}', [BillingController::class, 'checkout'])
+        ->name('billing.checkout');
+
+    Route::post('/billing/portal', [BillingController::class, 'portal'])
+        ->name('billing.portal');
 });
 
 require __DIR__.'/auth.php';

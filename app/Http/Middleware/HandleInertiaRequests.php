@@ -81,6 +81,12 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
             ],
+            'flash' => [
+                'success' => fn (): ?string => $request->session()->get('success'),
+                'warning' => fn (): ?string => $request->session()->get('warning'),
+                'error' => fn (): ?string => $request->session()->get('error'),
+                'status' => fn (): ?string => $request->session()->get('status'),
+            ],
             'organization' => [
                 'current' => $currentOrganizationPayload,
                 'all' => $organizations,

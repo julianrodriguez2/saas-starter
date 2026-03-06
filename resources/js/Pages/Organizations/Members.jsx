@@ -7,7 +7,7 @@ import { Head, router, useForm } from '@inertiajs/react';
 import { useState } from 'react';
 
 export default function Members({
-    organization,
+    membersOrganization,
     members,
     invites,
     currentUserRole,
@@ -35,7 +35,7 @@ export default function Members({
     };
 
     const removeMember = (member) => {
-        if (!confirm(`Remove ${member.name} from ${organization.name}?`)) {
+        if (!confirm(`Remove ${member.name} from ${membersOrganization.name}?`)) {
             return;
         }
 
