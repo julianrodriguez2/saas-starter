@@ -20,6 +20,7 @@ class StoreUsageEventRequest extends FormRequest
             'event_type' => ['required', 'string', 'max:100'],
             'quantity' => ['nullable', 'integer', 'min:1'],
             'metadata' => ['nullable', 'array'],
+            'idempotency_key' => ['nullable', 'string', 'max:255'],
         ];
     }
 }

@@ -8,9 +8,11 @@ use App\Services\StripePlanSyncService;
 use App\Support\CurrentOrganization;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
 
 class BillingController extends Controller
@@ -79,8 +81,32 @@ class BillingController extends Controller
         }
 
         $organization->createOrGetStripeCustomer();
-        $organization->stripe_customer_id = $organization->stripe_id ?? $organization->stripe_customer_id;
-        $organization->save();
+
+        try {
+            $organization = DB::transaction(function () use ($organization): Organization {
+                $lockedOrganization = Organization::query()
+                    ->whereKey($organization->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
+
+                if ($this->hasPaidSubscription($lockedOrganization)) {
+                    throw new RuntimeException('Organization already has an active paid subscription.');
+                }
+
+                if (filled($organization->stripe_id)) {
+                    $lockedOrganization->stripe_id = $organization->stripe_id;
+                }
+
+                $lockedOrganization->stripe_customer_id = $lockedOrganization->stripe_id
+                    ?: ($organization->stripe_customer_id ?: $lockedOrganization->stripe_customer_id);
+                $lockedOrganization->save();
+
+                return $lockedOrganization;
+            });
+        } catch (RuntimeException) {
+            return redirect()->route('billing.index')
+                ->with('warning', 'Organization already has an active paid subscription.');
+        }
 
         return $organization->newSubscription('default', $targetPlan->stripe_price_id)->checkout([
             'success_url' => route('billing.checkout.success'),

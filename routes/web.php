@@ -7,6 +7,7 @@ use App\Http\Controllers\OrganizationMemberController;
 use App\Http\Controllers\OrganizationSettingsController;
 use App\Http\Controllers\OrganizationSwitchController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\SystemEventDiagnosticsController;
 use App\Http\Controllers\StripeWebhookController;
 use App\Http\Controllers\UsageController;
 use Illuminate\Foundation\Application;
@@ -89,6 +90,14 @@ Route::middleware(['auth', 'resolve.organization', 'org.role:admin'])->group(fun
 
     Route::post('/usage/test-record', [UsageController::class, 'testRecord'])
         ->name('usage.test-record');
+});
+
+Route::middleware(['auth', 'resolve.organization', 'org.role:owner'])->group(function () {
+    Route::get('/system/events', [SystemEventDiagnosticsController::class, 'index'])
+        ->name('system.events.index');
+
+    Route::post('/system/events/{failedEvent}/resolve', [SystemEventDiagnosticsController::class, 'resolve'])
+        ->name('system.events.resolve');
 });
 
 Route::middleware(['auth', 'resolve.organization'])

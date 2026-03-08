@@ -3,9 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Organization;
-use App\Models\StripeWebhookEvent;
+use App\Services\DomainEventFailureService;
+use App\Services\IdempotencyService;
 use App\Services\StripePlanSyncService;
-use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Laravel\Cashier\Http\Controllers\WebhookController as CashierWebhookController;
@@ -14,40 +14,63 @@ use Throwable;
 
 class StripeWebhookController extends CashierWebhookController
 {
+    private const IDEMPOTENCY_SCOPE = 'stripe.webhook';
+
     public function __construct(
-        private readonly StripePlanSyncService $stripePlanSyncService
+        private readonly StripePlanSyncService $stripePlanSyncService,
+        private readonly IdempotencyService $idempotencyService,
+        private readonly DomainEventFailureService $domainEventFailureService
     ) {
     }
 
     public function handleWebhook(Request $request): HttpResponse
     {
-        $eventId = (string) data_get($request->all(), 'id', '');
-        $type = (string) data_get($request->all(), 'type', 'unknown');
-
-        $webhookEvent = $this->getOrCreateWebhookEvent($eventId, $type);
-
-        if ($webhookEvent !== null && $webhookEvent->processed_at !== null) {
-            return new Response('Webhook already processed.', 200);
-        }
+        $payload = $request->all();
+        $eventId = (string) data_get($payload, 'id', '');
+        $eventType = (string) data_get($payload, 'type', 'unknown');
+        $fingerprint = $request->getContent() !== ''
+            ? hash('sha256', $request->getContent())
+            : null;
 
         try {
-            $response = parent::handleWebhook($request);
-        } catch (Throwable $exception) {
-            if ($webhookEvent !== null && $webhookEvent->processed_at === null) {
-                $webhookEvent->delete();
+            if ($eventId !== '') {
+                $this->idempotencyService->acquire(
+                    self::IDEMPOTENCY_SCOPE,
+                    $eventId,
+                    $fingerprint
+                );
+
+                if ($this->idempotencyService->alreadyProcessed(self::IDEMPOTENCY_SCOPE, $eventId)) {
+                    return new Response('Webhook already processed.', 200);
+                }
             }
+
+            $response = parent::handleWebhook($request);
+
+            if ($eventId !== '' && $response->getStatusCode() < 400) {
+                $this->idempotencyService->markProcessed(
+                    self::IDEMPOTENCY_SCOPE,
+                    $eventId,
+                    [
+                        'event_id' => $eventId,
+                        'event_type' => $eventType,
+                        'status_code' => $response->getStatusCode(),
+                    ]
+                );
+            }
+
+            return $response;
+        } catch (Throwable $exception) {
+            $this->domainEventFailureService->recordFailure(
+                source: 'stripe',
+                eventKey: $eventId !== '' ? $eventId : null,
+                eventType: $eventType,
+                payload: is_array($payload) ? $payload : null,
+                error: $exception
+            );
 
             throw $exception;
         }
-
-        if ($webhookEvent !== null && $response->getStatusCode() < 400) {
-            $webhookEvent->forceFill([
-                'type' => $type,
-                'processed_at' => now(),
-            ])->save();
-        }
-
-        return $response;
     }
 
     protected function handleCustomerSubscriptionCreated(array $payload): HttpResponse
@@ -151,24 +174,6 @@ class StripeWebhookController extends CashierWebhookController
             ->where('stripe_id', $stripeCustomerId)
             ->orWhere('stripe_customer_id', $stripeCustomerId)
             ->first();
-    }
-
-    private function getOrCreateWebhookEvent(string $eventId, string $type): ?StripeWebhookEvent
-    {
-        if ($eventId === '') {
-            return null;
-        }
-
-        try {
-            return StripeWebhookEvent::query()->firstOrCreate(
-                ['stripe_event_id' => $eventId],
-                ['type' => $type]
-            );
-        } catch (QueryException) {
-            return StripeWebhookEvent::query()
-                ->where('stripe_event_id', $eventId)
-                ->first();
-        }
     }
 
     private function callParentWebhookHandler(string $method, array $payload): HttpResponse

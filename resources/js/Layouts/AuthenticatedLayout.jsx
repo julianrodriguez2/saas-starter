@@ -13,6 +13,7 @@ export default function AuthenticatedLayout({ header, children }) {
     const canManageMembers =
         currentOrganization?.role === 'owner' ||
         currentOrganization?.role === 'admin';
+    const canViewSystemEvents = currentOrganization?.role === 'owner';
 
     const [showingNavigationDropdown, setShowingNavigationDropdown] =
         useState(false);
@@ -54,6 +55,14 @@ export default function AuthenticatedLayout({ header, children }) {
                                 >
                                     Usage
                                 </NavLink>
+                                {canViewSystemEvents && (
+                                    <NavLink
+                                        href={route('system.events.index')}
+                                        active={route().current('system.events.*')}
+                                    >
+                                        System Events
+                                    </NavLink>
+                                )}
                                 {canManageMembers && (
                                     <NavLink
                                         href={route('organizations.members.index')}
@@ -230,6 +239,14 @@ export default function AuthenticatedLayout({ header, children }) {
                         >
                             Usage
                         </ResponsiveNavLink>
+                        {canViewSystemEvents && (
+                            <ResponsiveNavLink
+                                href={route('system.events.index')}
+                                active={route().current('system.events.*')}
+                            >
+                                System Events
+                            </ResponsiveNavLink>
+                        )}
                         {canManageMembers && (
                             <ResponsiveNavLink
                                 href={route('organizations.members.index')}

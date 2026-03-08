@@ -11,11 +11,13 @@ use App\Services\EntitlementService;
 use App\Support\CurrentOrganization;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use InvalidArgumentException;
 
 class OrganizationMemberController extends Controller
 {
@@ -96,63 +98,80 @@ class OrganizationMemberController extends Controller
             abort(403);
         }
 
-        $existingUser = User::query()
-            ->whereRaw('lower(email) = ?', [$email])
-            ->first();
+        try {
+            $statusMessage = DB::transaction(function () use (
+                $organization,
+                $actor,
+                $email,
+                $role,
+                $entitlementService
+            ): string {
+                $lockedOrganization = Organization::query()
+                    ->whereKey($organization->id)
+                    ->lockForUpdate()
+                    ->firstOrFail();
 
-        $willAddMember = $existingUser === null
-            || ! $existingUser->belongsToOrganization($organization);
+                $existingUser = User::query()
+                    ->whereRaw('lower(email) = ?', [$email])
+                    ->first();
 
-        if ($willAddMember) {
-            try {
-                $entitlementService->checkLimit(
-                    $organization,
-                    'team_members',
-                    $this->currentMemberCount($organization) + 1
-                );
-            } catch (EntitlementLimitExceededException) {
-                return redirect()->back()->withErrors([
-                    'email' => 'Team member limit reached for your current plan.',
-                ]);
-            }
-        }
+                $willAddMember = $existingUser === null
+                    || ! $existingUser->belongsToOrganization($lockedOrganization);
 
-        if ($existingUser !== null) {
-            if ($organization->owner_id === $existingUser->id) {
-                return redirect()->back()->withErrors([
-                    'email' => 'The organization owner is already a member.',
-                ]);
-            }
-
-            if ($actor->isAdmin($organization) && ! $actor->isOwner($organization)) {
-                if ($existingUser->isAdmin($organization) || $existingUser->isOwner($organization)) {
-                    abort(403);
+                if ($willAddMember) {
+                    $entitlementService->checkLimit(
+                        $lockedOrganization,
+                        'team_members',
+                        $this->currentMemberCount($lockedOrganization) + 1
+                    );
                 }
-            }
 
-            $organization->users()->syncWithoutDetaching([
-                $existingUser->id => ['role' => $role],
+                if ($existingUser !== null) {
+                    if ($lockedOrganization->owner_id === $existingUser->id) {
+                        throw new InvalidArgumentException('The organization owner is already a member.');
+                    }
+
+                    if ($actor->isAdmin($lockedOrganization) && ! $actor->isOwner($lockedOrganization)) {
+                        if ($existingUser->isAdmin($lockedOrganization) || $existingUser->isOwner($lockedOrganization)) {
+                            abort(403);
+                        }
+                    }
+
+                    $lockedOrganization->users()->syncWithoutDetaching([
+                        $existingUser->id => ['role' => $role],
+                    ]);
+
+                    $lockedOrganization->users()->updateExistingPivot($existingUser->id, ['role' => $role]);
+
+                    $lockedOrganization->invites()
+                        ->whereRaw('lower(email) = ?', [$email])
+                        ->delete();
+
+                    return 'Member added to organization.';
+                }
+
+                $lockedOrganization->invites()->updateOrCreate(
+                    ['email' => $email],
+                    [
+                        'role' => $role,
+                        'token' => (string) Str::uuid(),
+                        'created_at' => now(),
+                    ]
+                );
+
+                return 'Invitation created.';
+            });
+        } catch (EntitlementLimitExceededException) {
+            return redirect()->back()->withErrors([
+                'email' => 'Team member limit reached for your current plan.',
             ]);
-
-            $organization->users()->updateExistingPivot($existingUser->id, ['role' => $role]);
-
-            $organization->invites()
-                ->whereRaw('lower(email) = ?', [$email])
-                ->delete();
-
-            return redirect()->back()->with('status', 'Member added to organization.');
+        } catch (InvalidArgumentException $exception) {
+            return redirect()->back()->withErrors([
+                'email' => $exception->getMessage(),
+            ]);
         }
 
-        $organization->invites()->updateOrCreate(
-            ['email' => $email],
-            [
-                'role' => $role,
-                'token' => (string) Str::uuid(),
-                'created_at' => now(),
-            ]
-        );
-
-        return redirect()->back()->with('status', 'Invitation created.');
+        return redirect()->back()->with('status', $statusMessage);
     }
 
     public function destroy(Request $request, CurrentOrganization $currentOrganization, User $user): RedirectResponse

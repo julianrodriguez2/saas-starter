@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Exceptions\EntitlementLimitExceededException;
 use App\Models\Organization;
 use App\Models\OrganizationUser;
+use App\Services\DomainEventFailureService;
 use App\Services\EntitlementService;
 use App\Services\UsageAggregator;
 use App\Services\UsageRecorder;
@@ -15,6 +16,7 @@ use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
 use InvalidArgumentException;
+use Throwable;
 
 class UsageController extends Controller
 {
@@ -71,7 +73,8 @@ class UsageController extends Controller
     public function testRecord(
         Request $request,
         CurrentOrganization $currentOrganization,
-        UsageRecorder $usageRecorder
+        UsageRecorder $usageRecorder,
+        DomainEventFailureService $domainEventFailureService
     ): RedirectResponse {
         $organization = $this->resolveOrganization($currentOrganization);
 
@@ -97,6 +100,24 @@ class UsageController extends Controller
                     'usage' => $exception->getMessage(),
                 ])
                 ->with('error', $exception->getMessage());
+        } catch (Throwable $exception) {
+            $domainEventFailureService->recordFailure(
+                source: 'internal_action',
+                eventKey: null,
+                eventType: 'api_call',
+                payload: [
+                    'organization_id' => $organization->id,
+                    'actor_id' => $request->user()->id,
+                    'source' => 'usage.test-record',
+                ],
+                error: $exception
+            );
+
+            return redirect()->route('usage.index')
+                ->withErrors([
+                    'usage' => 'Failed to record test usage event.',
+                ])
+                ->with('error', 'Failed to record test usage event.');
         }
 
         return redirect()->route('usage.index')

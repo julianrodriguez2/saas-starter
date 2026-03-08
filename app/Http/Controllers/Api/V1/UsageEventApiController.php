@@ -5,17 +5,20 @@ namespace App\Http\Controllers\Api\V1;
 use App\Exceptions\EntitlementLimitExceededException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreUsageEventRequest;
+use App\Services\DomainEventFailureService;
 use App\Services\UsageRecorder;
 use App\Support\CurrentOrganization;
 use Illuminate\Http\JsonResponse;
 use InvalidArgumentException;
+use Throwable;
 
 class UsageEventApiController extends Controller
 {
     public function store(
         StoreUsageEventRequest $request,
         CurrentOrganization $currentOrganization,
-        UsageRecorder $usageRecorder
+        UsageRecorder $usageRecorder,
+        DomainEventFailureService $domainEventFailureService
     ): JsonResponse {
         $organization = $currentOrganization->organization;
 
@@ -37,7 +40,8 @@ class UsageEventApiController extends Controller
                     ...($validated['metadata'] ?? []),
                     'source' => 'api.v1.usage-events',
                     'actor_id' => $request->user()->id,
-                ]
+                ],
+                idempotencyKey: $validated['idempotency_key'] ?? null
             );
         } catch (EntitlementLimitExceededException $exception) {
             return response()->json([
@@ -54,6 +58,19 @@ class UsageEventApiController extends Controller
                 'success' => false,
                 'message' => $exception->getMessage(),
             ], 422);
+        } catch (Throwable $exception) {
+            $domainEventFailureService->recordFailure(
+                source: 'internal_api',
+                eventKey: $validated['idempotency_key'] ?? null,
+                eventType: $validated['event_type'] ?? null,
+                payload: $validated,
+                error: $exception
+            );
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Usage event processing failed.',
+            ], 500);
         }
 
         return response()->json([
