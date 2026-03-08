@@ -85,6 +85,12 @@ class OrganizationMemberController extends Controller
 
         Gate::authorize('manageMembers', $organization);
 
+        if ($organization->is_suspended) {
+            return redirect()->back()
+                ->withErrors(['organization' => 'Organization is suspended.'])
+                ->with('error', 'Organization is suspended.');
+        }
+
         $validated = $request->validate([
             'email' => ['required', 'email'],
             'role' => ['required', Rule::in([OrganizationUser::ROLE_ADMIN, OrganizationUser::ROLE_MEMBER])],

@@ -10,6 +10,10 @@ class OrganizationPolicy
 {
     public function view(User $user, Organization $organization): bool
     {
+        if ($user->isSuperAdmin()) {
+            return true;
+        }
+
         if ($organization->owner_id === $user->id) {
             return true;
         }
@@ -21,6 +25,10 @@ class OrganizationPolicy
 
     public function update(User $user, Organization $organization): bool
     {
+        if ($user->isSuperAdmin()) {
+            return true;
+        }
+
         if ($organization->owner_id === $user->id) {
             return true;
         }
@@ -33,6 +41,10 @@ class OrganizationPolicy
 
     public function manageMembers(User $user, Organization $organization): bool
     {
+        if ($user->isSuperAdmin()) {
+            return true;
+        }
+
         if ($user->isOwner($organization)) {
             return true;
         }

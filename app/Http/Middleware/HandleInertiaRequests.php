@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Organization;
+use App\Support\AdminImpersonation;
 use App\Support\CurrentOrganization;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
@@ -31,21 +32,22 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $user = $request->user();
         $currentOrganization = app()->bound(CurrentOrganization::class)
             ? app(CurrentOrganization::class)
             : new CurrentOrganization();
         $currentOrganizationPayload = $currentOrganization->toArray();
 
-        if ($currentOrganizationPayload !== null && $request->user() !== null) {
-            $currentOrganizationPayload['role'] = $request->user()->roleInOrganization(
+        if ($currentOrganizationPayload !== null && $user !== null) {
+            $currentOrganizationPayload['role'] = $user->roleInOrganization(
                 $currentOrganization->organization
             );
         }
 
-        if ($request->user() === null) {
+        if ($user === null) {
             $organizations = [];
         } else {
-            $memberOrganizations = $request->user()
+            $memberOrganizations = $user
                 ->organizations()
                 ->select('organizations.id', 'organizations.name')
                 ->get()
@@ -57,7 +59,7 @@ class HandleInertiaRequests extends Middleware
                     ],
                 ]);
 
-            $ownedOrganizations = $request->user()
+            $ownedOrganizations = $user
                 ->ownedOrganizations()
                 ->select('organizations.id', 'organizations.name')
                 ->get()
@@ -76,10 +78,31 @@ class HandleInertiaRequests extends Middleware
                 ->all();
         }
 
+        $isSuperAdmin = $user?->isSuperAdmin() ?? false;
+        $isImpersonating = AdminImpersonation::isActiveFor($request, $user);
+        $impersonatedOrganization = null;
+
+        if ($isImpersonating) {
+            $impersonatedOrganizationId = AdminImpersonation::impersonatedOrganizationId($request);
+
+            if ($currentOrganizationPayload !== null && $currentOrganizationPayload['id'] === $impersonatedOrganizationId) {
+                $impersonatedOrganization = [
+                    'id' => $currentOrganizationPayload['id'],
+                    'name' => $currentOrganizationPayload['name'],
+                ];
+            } elseif ($impersonatedOrganizationId !== null) {
+                $impersonatedOrganization = Organization::query()
+                    ->whereKey($impersonatedOrganizationId)
+                    ->first(['id', 'name'])
+                    ?->only(['id', 'name']);
+            }
+        }
+
         return [
             ...parent::share($request),
             'auth' => [
-                'user' => $request->user(),
+                'user' => $user,
+                'is_super_admin' => $isSuperAdmin,
             ],
             'flash' => [
                 'success' => fn (): ?string => $request->session()->get('success'),
@@ -90,6 +113,11 @@ class HandleInertiaRequests extends Middleware
             'organization' => [
                 'current' => $currentOrganizationPayload,
                 'all' => $organizations,
+            ],
+            'impersonation' => [
+                'active' => $isImpersonating,
+                'organization' => $impersonatedOrganization,
+                'started_at' => $request->session()->get(AdminImpersonation::STARTED_AT),
             ],
         ];
     }

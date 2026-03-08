@@ -6,14 +6,16 @@ import { Link, usePage } from '@inertiajs/react';
 import { useState } from 'react';
 
 export default function AuthenticatedLayout({ header, children }) {
-    const { auth, organization } = usePage().props;
+    const { auth, organization, impersonation } = usePage().props;
     const user = auth.user;
+    const isSuperAdmin = Boolean(auth?.is_super_admin);
     const organizations = organization?.all ?? [];
     const currentOrganization = organization?.current;
+    const isImpersonating = Boolean(impersonation?.active);
     const canManageMembers =
         currentOrganization?.role === 'owner' ||
-        currentOrganization?.role === 'admin';
-    const canViewSystemEvents = currentOrganization?.role === 'owner';
+        currentOrganization?.role === 'admin' ||
+        (isSuperAdmin && isImpersonating);
 
     const [showingNavigationDropdown, setShowingNavigationDropdown] =
         useState(false);
@@ -55,14 +57,6 @@ export default function AuthenticatedLayout({ header, children }) {
                                 >
                                     Usage
                                 </NavLink>
-                                {canViewSystemEvents && (
-                                    <NavLink
-                                        href={route('system.events.index')}
-                                        active={route().current('system.events.*')}
-                                    >
-                                        System Events
-                                    </NavLink>
-                                )}
                                 {canManageMembers && (
                                     <NavLink
                                         href={route('organizations.members.index')}
@@ -70,6 +64,33 @@ export default function AuthenticatedLayout({ header, children }) {
                                     >
                                         Members
                                     </NavLink>
+                                )}
+                                {isSuperAdmin && (
+                                    <>
+                                        <div className="my-4 w-px bg-gray-200 dark:bg-gray-700" />
+                                        <NavLink
+                                            href={route('admin.dashboard')}
+                                            active={route().current('admin.dashboard')}
+                                        >
+                                            Admin Dashboard
+                                        </NavLink>
+                                        <NavLink
+                                            href={route('admin.organizations.index')}
+                                            active={route().current(
+                                                'admin.organizations.*',
+                                            )}
+                                        >
+                                            Organizations
+                                        </NavLink>
+                                        <NavLink
+                                            href={route('system.events.index')}
+                                            active={route().current(
+                                                'system.events.*',
+                                            )}
+                                        >
+                                            System Events
+                                        </NavLink>
+                                    </>
                                 )}
                             </div>
                         </div>
@@ -239,14 +260,6 @@ export default function AuthenticatedLayout({ header, children }) {
                         >
                             Usage
                         </ResponsiveNavLink>
-                        {canViewSystemEvents && (
-                            <ResponsiveNavLink
-                                href={route('system.events.index')}
-                                active={route().current('system.events.*')}
-                            >
-                                System Events
-                            </ResponsiveNavLink>
-                        )}
                         {canManageMembers && (
                             <ResponsiveNavLink
                                 href={route('organizations.members.index')}
@@ -254,6 +267,30 @@ export default function AuthenticatedLayout({ header, children }) {
                             >
                                 Members
                             </ResponsiveNavLink>
+                        )}
+                        {isSuperAdmin && (
+                            <>
+                                <ResponsiveNavLink
+                                    href={route('admin.dashboard')}
+                                    active={route().current('admin.dashboard')}
+                                >
+                                    Admin Dashboard
+                                </ResponsiveNavLink>
+                                <ResponsiveNavLink
+                                    href={route('admin.organizations.index')}
+                                    active={route().current(
+                                        'admin.organizations.*',
+                                    )}
+                                >
+                                    Organizations
+                                </ResponsiveNavLink>
+                                <ResponsiveNavLink
+                                    href={route('system.events.index')}
+                                    active={route().current('system.events.*')}
+                                >
+                                    System Events
+                                </ResponsiveNavLink>
+                            </>
                         )}
                     </div>
 
@@ -279,6 +316,15 @@ export default function AuthenticatedLayout({ header, children }) {
                                     {org.name}
                                 </ResponsiveNavLink>
                             ))}
+                            {isImpersonating && isSuperAdmin && (
+                                <ResponsiveNavLink
+                                    method="post"
+                                    href={route('admin.impersonation.stop')}
+                                    as="button"
+                                >
+                                    Stop Impersonation
+                                </ResponsiveNavLink>
+                            )}
                             <ResponsiveNavLink href={route('profile.edit')}>
                                 Profile
                             </ResponsiveNavLink>
@@ -293,6 +339,28 @@ export default function AuthenticatedLayout({ header, children }) {
                     </div>
                 </div>
             </nav>
+            {isImpersonating && (
+                <div className="border-b border-amber-200 bg-amber-50">
+                    <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-2 text-sm text-amber-900 sm:px-6 lg:px-8">
+                        <span className="font-medium">
+                            Impersonating organization:{' '}
+                            {impersonation?.organization?.name ??
+                                currentOrganization?.name ??
+                                'Unknown organization'}
+                        </span>
+                        {isSuperAdmin && (
+                            <Link
+                                href={route('admin.impersonation.stop')}
+                                method="post"
+                                as="button"
+                                className="rounded-md border border-amber-400 px-3 py-1 text-xs font-semibold uppercase tracking-wider text-amber-800 transition hover:bg-amber-100"
+                            >
+                                Stop Impersonation
+                            </Link>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {header && (
                 <header className="bg-white shadow dark:bg-gray-800">

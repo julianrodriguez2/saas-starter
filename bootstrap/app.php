@@ -19,6 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'resolve.organization' => \App\Http\Middleware\ResolveOrganizationFromSession::class,
             'org.role' => \App\Http\Middleware\EnsureOrganizationRole::class,
+            'super.admin' => \App\Http\Middleware\EnsureSuperAdmin::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

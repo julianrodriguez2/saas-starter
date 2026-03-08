@@ -94,4 +94,21 @@ class User extends Authenticatable
     {
         return $this->roleInOrganization($organization) !== null;
     }
+
+    public function isSuperAdmin(): bool
+    {
+        $email = strtolower(trim((string) $this->email));
+
+        if ($email === '') {
+            return false;
+        }
+
+        $superAdminEmails = config('admin.super_admin_emails', []);
+
+        if (! is_array($superAdminEmails)) {
+            return false;
+        }
+
+        return in_array($email, $superAdminEmails, true);
+    }
 }

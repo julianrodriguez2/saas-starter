@@ -67,6 +67,15 @@ class BillingController extends Controller
         string $plan
     ): HttpResponse|RedirectResponse {
         $organization = $this->resolveOrganization($currentOrganization);
+
+        if ($organization->is_suspended) {
+            return redirect()->route('billing.index')
+                ->withErrors([
+                    'organization' => 'Organization is suspended.',
+                ])
+                ->with('error', 'Organization is suspended.');
+        }
+
         $targetPlan = $this->resolvePaidPlan($plan);
 
         if ($targetPlan === null || blank($targetPlan->stripe_price_id)) {

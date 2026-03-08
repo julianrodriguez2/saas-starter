@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\OrganizationUser;
+use App\Support\AdminImpersonation;
 use App\Support\CurrentOrganization;
 use Closure;
 use Illuminate\Http\Request;
@@ -20,6 +21,10 @@ class EnsureOrganizationRole
 
         if ($user === null || $organization === null) {
             abort(403);
+        }
+
+        if (AdminImpersonation::isActiveFor($request, $user)) {
+            return $next($request);
         }
 
         if ($user->isOwner($organization)) {

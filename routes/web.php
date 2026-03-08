@@ -1,6 +1,9 @@
 <?php
 
 use App\Http\Controllers\Api\V1\UsageEventApiController;
+use App\Http\Controllers\Admin\AdminDashboardController;
+use App\Http\Controllers\Admin\AdminImpersonationController;
+use App\Http\Controllers\Admin\AdminOrganizationController;
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\OrganizationController;
 use App\Http\Controllers\OrganizationMemberController;
@@ -92,13 +95,39 @@ Route::middleware(['auth', 'resolve.organization', 'org.role:admin'])->group(fun
         ->name('usage.test-record');
 });
 
-Route::middleware(['auth', 'resolve.organization', 'org.role:owner'])->group(function () {
+Route::middleware(['auth', 'super.admin'])->group(function () {
     Route::get('/system/events', [SystemEventDiagnosticsController::class, 'index'])
         ->name('system.events.index');
 
     Route::post('/system/events/{failedEvent}/resolve', [SystemEventDiagnosticsController::class, 'resolve'])
         ->name('system.events.resolve');
 });
+
+Route::middleware(['auth', 'super.admin'])
+    ->prefix('admin')
+    ->as('admin.')
+    ->group(function () {
+        Route::get('/', AdminDashboardController::class)
+            ->name('dashboard');
+
+        Route::get('/organizations', [AdminOrganizationController::class, 'index'])
+            ->name('organizations.index');
+
+        Route::get('/organizations/{organization}', [AdminOrganizationController::class, 'show'])
+            ->name('organizations.show');
+
+        Route::post('/organizations/{organization}/suspend', [AdminOrganizationController::class, 'suspend'])
+            ->name('organizations.suspend');
+
+        Route::post('/organizations/{organization}/unsuspend', [AdminOrganizationController::class, 'unsuspend'])
+            ->name('organizations.unsuspend');
+
+        Route::post('/organizations/{organization}/impersonate', [AdminOrganizationController::class, 'impersonate'])
+            ->name('organizations.impersonate');
+
+        Route::post('/impersonation/stop', [AdminImpersonationController::class, 'stop'])
+            ->name('impersonation.stop');
+    });
 
 Route::middleware(['auth', 'resolve.organization'])
     ->prefix('api/v1')

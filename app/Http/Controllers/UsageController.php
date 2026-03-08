@@ -78,6 +78,14 @@ class UsageController extends Controller
     ): RedirectResponse {
         $organization = $this->resolveOrganization($currentOrganization);
 
+        if ($organization->is_suspended) {
+            return redirect()->route('usage.index')
+                ->withErrors([
+                    'usage' => 'Organization is suspended.',
+                ])
+                ->with('error', 'Organization is suspended.');
+        }
+
         try {
             $usageRecorder->record(
                 organization: $organization,

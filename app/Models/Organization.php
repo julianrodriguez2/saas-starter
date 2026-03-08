@@ -34,6 +34,9 @@ class Organization extends Model
         'stripe_subscription_id',
         'plan_id',
         'trial_ends_at',
+        'is_suspended',
+        'suspended_at',
+        'suspension_reason',
     ];
 
     protected static function booted(): void
@@ -56,6 +59,8 @@ class Organization extends Model
     {
         return [
             'trial_ends_at' => 'datetime',
+            'is_suspended' => 'boolean',
+            'suspended_at' => 'datetime',
         ];
     }
 
