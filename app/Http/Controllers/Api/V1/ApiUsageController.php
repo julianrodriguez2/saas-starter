@@ -4,42 +4,35 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Exceptions\EntitlementLimitExceededException;
 use App\Http\Controllers\Controller;
-use App\Http\Requests\StoreUsageEventRequest;
+use App\Http\Requests\Api\StoreApiUsageEventRequest;
 use App\Services\DomainEventFailureService;
 use App\Services\UsageRecorder;
-use App\Support\CurrentOrganization;
+use App\Support\CurrentApiOrganization;
 use Illuminate\Http\JsonResponse;
 use InvalidArgumentException;
 use Throwable;
 
-class UsageEventApiController extends Controller
+class ApiUsageController extends Controller
 {
     public function store(
-        StoreUsageEventRequest $request,
-        CurrentOrganization $currentOrganization,
+        StoreApiUsageEventRequest $request,
+        CurrentApiOrganization $currentApiOrganization,
         UsageRecorder $usageRecorder,
         DomainEventFailureService $domainEventFailureService
     ): JsonResponse {
-        $organization = $currentOrganization->organization;
-
-        if ($organization === null) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Organization context was not found.',
-            ], 422);
-        }
-
+        $organization = $currentApiOrganization->organization;
+        $apiKey = $currentApiOrganization->apiKey;
         $validated = $request->validated();
 
         try {
             $usageEvent = $usageRecorder->record(
                 organization: $organization,
                 eventType: $validated['event_type'],
-                quantity: $validated['quantity'] ?? 1,
+                quantity: (int) $validated['quantity'],
                 metadata: [
                     ...($validated['metadata'] ?? []),
-                    'source' => 'api.v1.internal.usage-events',
-                    'actor_id' => $request->user()->id,
+                    'source' => 'api.v1.usage-events',
+                    'api_key_id' => $apiKey->id,
                 ],
                 idempotencyKey: $validated['idempotency_key'] ?? null
             );
@@ -63,7 +56,11 @@ class UsageEventApiController extends Controller
                 source: 'internal_api',
                 eventKey: $validated['idempotency_key'] ?? null,
                 eventType: $validated['event_type'] ?? null,
-                payload: $validated,
+                payload: [
+                    ...$validated,
+                    'organization_id' => $organization->id,
+                    'api_key_id' => $apiKey->id,
+                ],
                 error: $exception
             );
 
@@ -75,14 +72,9 @@ class UsageEventApiController extends Controller
 
         return response()->json([
             'success' => true,
-            'data' => [
-                'id' => $usageEvent->id,
-                'organization_id' => $usageEvent->organization_id,
-                'event_type' => $usageEvent->event_type,
-                'quantity' => $usageEvent->quantity,
-                'metadata' => $usageEvent->metadata,
-                'recorded_at' => $usageEvent->recorded_at?->toIso8601String(),
-            ],
+            'usage_event_id' => $usageEvent->id,
+            'event_type' => $usageEvent->event_type,
+            'quantity' => $usageEvent->quantity,
         ], 201);
     }
 }

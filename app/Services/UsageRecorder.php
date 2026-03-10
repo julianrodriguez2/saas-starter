@@ -243,14 +243,21 @@ class UsageRecorder
         $actorId = is_numeric($metadata['actor_id'] ?? null)
             ? (int) $metadata['actor_id']
             : $organization->owner_id;
+        $source = is_string($metadata['source'] ?? null)
+            ? $metadata['source']
+            : null;
+        $action = $source === 'api.v1.usage-events'
+            ? 'api.usage_event.recorded'
+            : 'usage.recorded';
 
         $organization->auditLogs()->create([
             'actor_id' => $actorId,
-            'action' => 'usage.recorded',
+            'action' => $action,
             'metadata' => [
                 'event_type' => $usageEvent->event_type,
                 'quantity' => $quantity,
                 'usage_event_id' => $usageEvent->id,
+                'source' => $source,
             ],
         ]);
     }

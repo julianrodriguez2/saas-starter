@@ -118,6 +118,11 @@ class Organization extends Model
         return $this->hasMany(Invite::class);
     }
 
+    public function apiKeys(): HasMany
+    {
+        return $this->hasMany(ApiKey::class);
+    }
+
     public function stripeName(): string
     {
         return $this->name;

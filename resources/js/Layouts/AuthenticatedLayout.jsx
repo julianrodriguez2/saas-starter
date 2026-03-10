@@ -57,12 +57,26 @@ export default function AuthenticatedLayout({ header, children }) {
                                 >
                                     Usage
                                 </NavLink>
+                                <NavLink
+                                    href={route('developers.api')}
+                                    active={route().current('developers.api')}
+                                >
+                                    Developer API
+                                </NavLink>
                                 {canManageMembers && (
                                     <NavLink
                                         href={route('organizations.members.index')}
                                         active={route().current('organizations.members.*')}
                                     >
                                         Members
+                                    </NavLink>
+                                )}
+                                {canManageMembers && (
+                                    <NavLink
+                                        href={route('settings.api-keys.index')}
+                                        active={route().current('settings.api-keys.*')}
+                                    >
+                                        API Keys
                                     </NavLink>
                                 )}
                                 {isSuperAdmin && (
@@ -260,12 +274,26 @@ export default function AuthenticatedLayout({ header, children }) {
                         >
                             Usage
                         </ResponsiveNavLink>
+                        <ResponsiveNavLink
+                            href={route('developers.api')}
+                            active={route().current('developers.api')}
+                        >
+                            Developer API
+                        </ResponsiveNavLink>
                         {canManageMembers && (
                             <ResponsiveNavLink
                                 href={route('organizations.members.index')}
                                 active={route().current('organizations.members.*')}
                             >
                                 Members
+                            </ResponsiveNavLink>
+                        )}
+                        {canManageMembers && (
+                            <ResponsiveNavLink
+                                href={route('settings.api-keys.index')}
+                                active={route().current('settings.api-keys.*')}
+                            >
+                                API Keys
                             </ResponsiveNavLink>
                         )}
                         {isSuperAdmin && (

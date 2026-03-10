@@ -4,7 +4,9 @@ use App\Http\Controllers\Api\V1\UsageEventApiController;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminImpersonationController;
 use App\Http\Controllers\Admin\AdminOrganizationController;
+use App\Http\Controllers\ApiKeyController;
 use App\Http\Controllers\BillingController;
+use App\Http\Controllers\DeveloperApiDocsController;
 use App\Http\Controllers\OrganizationController;
 use App\Http\Controllers\OrganizationMemberController;
 use App\Http\Controllers\OrganizationSettingsController;
@@ -70,6 +72,9 @@ Route::middleware(['auth', 'resolve.organization'])->group(function () {
 
     Route::get('/usage', [UsageController::class, 'index'])
         ->name('usage.index');
+
+    Route::get('/developers/api', DeveloperApiDocsController::class)
+        ->name('developers.api');
 });
 
 Route::middleware(['auth', 'resolve.organization', 'org.role:admin'])->group(function () {
@@ -93,6 +98,15 @@ Route::middleware(['auth', 'resolve.organization', 'org.role:admin'])->group(fun
 
     Route::post('/usage/test-record', [UsageController::class, 'testRecord'])
         ->name('usage.test-record');
+
+    Route::get('/settings/api-keys', [ApiKeyController::class, 'index'])
+        ->name('settings.api-keys.index');
+
+    Route::post('/settings/api-keys', [ApiKeyController::class, 'store'])
+        ->name('settings.api-keys.store');
+
+    Route::post('/settings/api-keys/{apiKey}/revoke', [ApiKeyController::class, 'revoke'])
+        ->name('settings.api-keys.revoke');
 });
 
 Route::middleware(['auth', 'super.admin'])->group(function () {
@@ -132,8 +146,8 @@ Route::middleware(['auth', 'super.admin'])
 Route::middleware(['auth', 'resolve.organization'])
     ->prefix('api/v1')
     ->group(function () {
-        Route::post('/usage-events', [UsageEventApiController::class, 'store'])
-            ->name('api.v1.usage-events.store');
+        Route::post('/internal/usage-events', [UsageEventApiController::class, 'store'])
+            ->name('api.v1.internal.usage-events.store');
 });
 
 require __DIR__.'/auth.php';

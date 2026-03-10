@@ -109,6 +109,7 @@ class HandleInertiaRequests extends Middleware
                 'warning' => fn (): ?string => $request->session()->get('warning'),
                 'error' => fn (): ?string => $request->session()->get('error'),
                 'status' => fn (): ?string => $request->session()->get('status'),
+                'api_key_plaintext' => fn (): ?string => $request->session()->get('api_key_plaintext'),
             ],
             'organization' => [
                 'current' => $currentOrganizationPayload,
