@@ -4,9 +4,12 @@ namespace App\Services;
 
 use App\Exceptions\EntitlementLimitExceededException;
 use App\Jobs\ProcessUsageEvent;
+use App\Models\ApiKey;
 use App\Models\IdempotencyKey;
 use App\Models\Organization;
+use App\Models\User;
 use App\Models\UsageEvent;
+use App\Support\AuditActions;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use InvalidArgumentException;
@@ -26,7 +29,8 @@ class UsageRecorder
     public function __construct(
         private readonly UsageAggregator $usageAggregator,
         private readonly EntitlementService $entitlementService,
-        private readonly IdempotencyService $idempotencyService
+        private readonly IdempotencyService $idempotencyService,
+        private readonly AuditLogger $auditLogger
     ) {
     }
 
@@ -240,26 +244,68 @@ class UsageRecorder
             return;
         }
 
-        $actorId = is_numeric($metadata['actor_id'] ?? null)
-            ? (int) $metadata['actor_id']
-            : $organization->owner_id;
+        $actor = $this->resolveAuditActorFromMetadata($organization, $metadata);
+        $actorType = $actor === null
+            ? $this->resolveActorTypeFromMetadata($metadata)
+            : null;
         $source = is_string($metadata['source'] ?? null)
             ? $metadata['source']
             : null;
-        $action = $source === 'api.v1.usage-events'
-            ? 'api.usage_event.recorded'
-            : 'usage.recorded';
 
-        $organization->auditLogs()->create([
-            'actor_id' => $actorId,
-            'action' => $action,
-            'metadata' => [
+        $this->auditLogger->logForOrganization(
+            action: AuditActions::USAGE_RECORDED,
+            organization: $organization,
+            actor: $actor,
+            actorType: $actorType,
+            targetType: 'usage_event',
+            targetId: (string) $usageEvent->id,
+            metadata: [
                 'event_type' => $usageEvent->event_type,
                 'quantity' => $quantity,
                 'usage_event_id' => $usageEvent->id,
                 'source' => $source,
             ],
-        ]);
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $metadata
+     */
+    private function resolveAuditActorFromMetadata(
+        Organization $organization,
+        array $metadata
+    ): User|ApiKey|null {
+        $actorId = $metadata['actor_id'] ?? null;
+
+        if (is_numeric($actorId)) {
+            return User::query()->find((int) $actorId);
+        }
+
+        $apiKeyId = $metadata['api_key_id'] ?? null;
+
+        if (is_numeric($apiKeyId)) {
+            return ApiKey::query()
+                ->where('organization_id', $organization->id)
+                ->find((int) $apiKeyId);
+        }
+
+        return null;
+    }
+
+    /**
+     * @param array<string, mixed> $metadata
+     */
+    private function resolveActorTypeFromMetadata(array $metadata): string
+    {
+        if (is_numeric($metadata['api_key_id'] ?? null)) {
+            return 'api_key';
+        }
+
+        if (is_numeric($metadata['actor_id'] ?? null)) {
+            return 'user';
+        }
+
+        return 'system';
     }
 
     private function normalizeIdempotencyKey(?string $idempotencyKey): ?string

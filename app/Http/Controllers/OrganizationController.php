@@ -4,6 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Organization;
 use App\Models\OrganizationUser;
+use App\Services\AuditLogger;
+use App\Support\AuditActions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -42,7 +44,7 @@ class OrganizationController extends Controller
         ]);
     }
 
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, AuditLogger $auditLogger): RedirectResponse
     {
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
@@ -58,6 +60,18 @@ class OrganizationController extends Controller
         $organization->users()->attach($user->id, [
             'role' => OrganizationUser::ROLE_OWNER,
         ]);
+
+        $auditLogger->logForOrganization(
+            action: AuditActions::ORGANIZATION_CREATED,
+            organization: $organization,
+            actor: $user,
+            targetType: 'organization',
+            targetId: $organization->id,
+            metadata: [
+                'source' => 'organization.create',
+            ],
+            request: $request
+        );
 
         $request->session()->put('organization_id', $organization->id);
 

@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Models\OrganizationUser;
 use App\Models\User;
+use App\Services\AuditLogger;
+use App\Support\AuditActions;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -31,7 +33,7 @@ class RegisteredUserController extends Controller
      *
      * @throws \Illuminate\Validation\ValidationException
      */
-    public function store(Request $request): RedirectResponse
+    public function store(Request $request, AuditLogger $auditLogger): RedirectResponse
     {
         $request->validate([
             'name' => 'required|string|max:255',
@@ -59,6 +61,26 @@ class RegisteredUserController extends Controller
         });
 
         event(new Registered($user));
+
+        $auditLogger->logPlatformEvent(
+            action: AuditActions::AUTH_REGISTERED,
+            actor: $user,
+            targetType: 'user',
+            targetId: (string) $user->id,
+            request: $request
+        );
+
+        $auditLogger->logForOrganization(
+            action: AuditActions::ORGANIZATION_CREATED,
+            organization: $organization,
+            actor: $user,
+            targetType: 'organization',
+            targetId: $organization->id,
+            metadata: [
+                'source' => 'auth.registration',
+            ],
+            request: $request
+        );
 
         Auth::login($user);
         $request->session()->put('organization_id', $organization->id);

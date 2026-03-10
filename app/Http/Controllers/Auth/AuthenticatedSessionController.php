@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Auth\LoginRequest;
+use App\Services\AuditLogger;
+use App\Support\AuditActions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -27,11 +29,21 @@ class AuthenticatedSessionController extends Controller
     /**
      * Handle an incoming authentication request.
      */
-    public function store(LoginRequest $request): RedirectResponse
+    public function store(LoginRequest $request, AuditLogger $auditLogger): RedirectResponse
     {
         $request->authenticate();
 
         $request->session()->regenerate();
+
+        if ($request->user() !== null) {
+            $auditLogger->logPlatformEvent(
+                action: AuditActions::AUTH_LOGIN,
+                actor: $request->user(),
+                targetType: 'user',
+                targetId: (string) $request->user()->id,
+                request: $request
+            );
+        }
 
         $organizationId = $request->user()
             ?->organizations()

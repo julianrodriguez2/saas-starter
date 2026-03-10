@@ -4,9 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Models\Organization;
 use App\Models\Plan;
+use App\Services\AuditLogger;
 use App\Services\StripePlanSyncService;
+use App\Support\AuditActions;
 use App\Support\CurrentOrganization;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -63,8 +66,10 @@ class BillingController extends Controller
     }
 
     public function checkout(
+        Request $request,
         CurrentOrganization $currentOrganization,
-        string $plan
+        string $plan,
+        AuditLogger $auditLogger
     ): HttpResponse|RedirectResponse {
         $organization = $this->resolveOrganization($currentOrganization);
 
@@ -117,6 +122,19 @@ class BillingController extends Controller
                 ->with('warning', 'Organization already has an active paid subscription.');
         }
 
+        $auditLogger->logForOrganization(
+            action: AuditActions::BILLING_CHECKOUT_STARTED,
+            organization: $organization,
+            actor: $request->user(),
+            targetType: 'plan',
+            targetId: (string) $targetPlan->id,
+            metadata: [
+                'plan_name' => $targetPlan->name,
+                'stripe_price_id' => $targetPlan->stripe_price_id,
+            ],
+            request: $request
+        );
+
         return $organization->newSubscription('default', $targetPlan->stripe_price_id)->checkout([
             'success_url' => route('billing.checkout.success'),
             'cancel_url' => route('billing.checkout.cancel'),
@@ -128,7 +146,11 @@ class BillingController extends Controller
         ]);
     }
 
-    public function portal(CurrentOrganization $currentOrganization): HttpResponse|RedirectResponse
+    public function portal(
+        Request $request,
+        CurrentOrganization $currentOrganization,
+        AuditLogger $auditLogger
+    ): HttpResponse|RedirectResponse
     {
         $organization = $this->resolveOrganization($currentOrganization);
 
@@ -141,6 +163,15 @@ class BillingController extends Controller
             return redirect()->route('billing.index')
                 ->with('error', 'No Stripe customer found for this organization.');
         }
+
+        $auditLogger->logForOrganization(
+            action: AuditActions::BILLING_PORTAL_OPENED,
+            organization: $organization,
+            actor: $request->user(),
+            targetType: 'organization',
+            targetId: $organization->id,
+            request: $request
+        );
 
         return $organization->redirectToBillingPortal(route('billing.index'));
     }

@@ -7,7 +7,9 @@ use App\Models\Invite;
 use App\Models\Organization;
 use App\Models\OrganizationUser;
 use App\Models\User;
+use App\Services\AuditLogger;
 use App\Services\EntitlementService;
+use App\Support\AuditActions;
 use App\Support\CurrentOrganization;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -78,7 +80,8 @@ class OrganizationMemberController extends Controller
     public function invite(
         Request $request,
         CurrentOrganization $currentOrganization,
-        EntitlementService $entitlementService
+        EntitlementService $entitlementService,
+        AuditLogger $auditLogger
     ): RedirectResponse
     {
         $organization = $this->resolveOrganization($currentOrganization);
@@ -105,13 +108,13 @@ class OrganizationMemberController extends Controller
         }
 
         try {
-            $statusMessage = DB::transaction(function () use (
+            $inviteOutcome = DB::transaction(function () use (
                 $organization,
                 $actor,
                 $email,
                 $role,
                 $entitlementService
-            ): string {
+            ): array {
                 $lockedOrganization = Organization::query()
                     ->whereKey($organization->id)
                     ->lockForUpdate()
@@ -153,10 +156,16 @@ class OrganizationMemberController extends Controller
                         ->whereRaw('lower(email) = ?', [$email])
                         ->delete();
 
-                    return 'Member added to organization.';
+                    return [
+                        'message' => 'Member added to organization.',
+                        'target_type' => 'user',
+                        'target_id' => (string) $existingUser->id,
+                        'email' => $existingUser->email,
+                        'role' => $role,
+                    ];
                 }
 
-                $lockedOrganization->invites()->updateOrCreate(
+                $invite = $lockedOrganization->invites()->updateOrCreate(
                     ['email' => $email],
                     [
                         'role' => $role,
@@ -165,7 +174,13 @@ class OrganizationMemberController extends Controller
                     ]
                 );
 
-                return 'Invitation created.';
+                return [
+                    'message' => 'Invitation created.',
+                    'target_type' => 'invite',
+                    'target_id' => (string) $invite->id,
+                    'email' => $email,
+                    'role' => $role,
+                ];
             });
         } catch (EntitlementLimitExceededException) {
             return redirect()->back()->withErrors([
@@ -177,11 +192,28 @@ class OrganizationMemberController extends Controller
             ]);
         }
 
-        return redirect()->back()->with('status', $statusMessage);
+        $auditLogger->logForOrganization(
+            action: AuditActions::MEMBER_INVITED,
+            organization: $organization,
+            actor: $actor,
+            targetType: $inviteOutcome['target_type'],
+            targetId: $inviteOutcome['target_id'],
+            metadata: [
+                'email' => $inviteOutcome['email'],
+                'role' => $inviteOutcome['role'],
+            ],
+            request: $request
+        );
+
+        return redirect()->back()->with('status', $inviteOutcome['message']);
     }
 
-    public function destroy(Request $request, CurrentOrganization $currentOrganization, User $user): RedirectResponse
-    {
+    public function destroy(
+        Request $request,
+        CurrentOrganization $currentOrganization,
+        User $user,
+        AuditLogger $auditLogger
+    ): RedirectResponse {
         $organization = $this->resolveOrganization($currentOrganization);
 
         Gate::authorize('manageMembers', $organization);
@@ -195,9 +227,22 @@ class OrganizationMemberController extends Controller
         }
 
         $actor = $request->user();
+        $removedRole = $user->roleInOrganization($organization);
 
         if ($actor->isOwner($organization)) {
             $organization->users()->detach($user->id);
+
+            $auditLogger->logForOrganization(
+                action: AuditActions::MEMBER_REMOVED,
+                organization: $organization,
+                actor: $actor,
+                targetType: 'user',
+                targetId: (string) $user->id,
+                metadata: [
+                    'removed_role' => $removedRole,
+                ],
+                request: $request
+            );
 
             return redirect()->back()->with('status', 'Member removed.');
         }
@@ -209,14 +254,30 @@ class OrganizationMemberController extends Controller
 
             $organization->users()->detach($user->id);
 
+            $auditLogger->logForOrganization(
+                action: AuditActions::MEMBER_REMOVED,
+                organization: $organization,
+                actor: $actor,
+                targetType: 'user',
+                targetId: (string) $user->id,
+                metadata: [
+                    'removed_role' => $removedRole,
+                ],
+                request: $request
+            );
+
             return redirect()->back()->with('status', 'Member removed.');
         }
 
         abort(403);
     }
 
-    public function updateRole(Request $request, CurrentOrganization $currentOrganization, User $user): RedirectResponse
-    {
+    public function updateRole(
+        Request $request,
+        CurrentOrganization $currentOrganization,
+        User $user,
+        AuditLogger $auditLogger
+    ): RedirectResponse {
         $organization = $this->resolveOrganization($currentOrganization);
 
         Gate::authorize('manageMembers', $organization);
@@ -235,9 +296,23 @@ class OrganizationMemberController extends Controller
 
         $actor = $request->user();
         $newRole = $validated['role'];
+        $previousRole = $user->roleInOrganization($organization);
 
         if ($actor->isOwner($organization)) {
             $organization->users()->updateExistingPivot($user->id, ['role' => $newRole]);
+
+            $auditLogger->logForOrganization(
+                action: AuditActions::MEMBER_ROLE_UPDATED,
+                organization: $organization,
+                actor: $actor,
+                targetType: 'user',
+                targetId: (string) $user->id,
+                metadata: [
+                    'previous_role' => $previousRole,
+                    'new_role' => $newRole,
+                ],
+                request: $request
+            );
 
             return redirect()->back()->with('status', 'Member role updated.');
         }
@@ -248,6 +323,19 @@ class OrganizationMemberController extends Controller
             }
 
             $organization->users()->updateExistingPivot($user->id, ['role' => OrganizationUser::ROLE_MEMBER]);
+
+            $auditLogger->logForOrganization(
+                action: AuditActions::MEMBER_ROLE_UPDATED,
+                organization: $organization,
+                actor: $actor,
+                targetType: 'user',
+                targetId: (string) $user->id,
+                metadata: [
+                    'previous_role' => $previousRole,
+                    'new_role' => OrganizationUser::ROLE_MEMBER,
+                ],
+                request: $request
+            );
 
             return redirect()->back()->with('status', 'Member role updated.');
         }

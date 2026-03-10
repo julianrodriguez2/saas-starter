@@ -79,6 +79,14 @@ export default function AuthenticatedLayout({ header, children }) {
                                         API Keys
                                     </NavLink>
                                 )}
+                                {canManageMembers && (
+                                    <NavLink
+                                        href={route('audit-logs.index')}
+                                        active={route().current('audit-logs.*')}
+                                    >
+                                        Audit Logs
+                                    </NavLink>
+                                )}
                                 {isSuperAdmin && (
                                     <>
                                         <div className="my-4 w-px bg-gray-200 dark:bg-gray-700" />
@@ -294,6 +302,14 @@ export default function AuthenticatedLayout({ header, children }) {
                                 active={route().current('settings.api-keys.*')}
                             >
                                 API Keys
+                            </ResponsiveNavLink>
+                        )}
+                        {canManageMembers && (
+                            <ResponsiveNavLink
+                                href={route('audit-logs.index')}
+                                active={route().current('audit-logs.*')}
+                            >
+                                Audit Logs
                             </ResponsiveNavLink>
                         )}
                         {isSuperAdmin && (

@@ -2,6 +2,7 @@
 
 namespace App\Services\Admin;
 
+use App\Models\AuditLog;
 use App\Models\FailedDomainEvent;
 use App\Models\Organization;
 use App\Models\OrganizationUser;
@@ -255,10 +256,14 @@ class AdminOrganizationQueryService
                     ])
                     ->all(),
                 'recent_audit_logs' => $organization->auditLogs
-                    ->map(fn ($auditLog): array => [
+                    ->map(fn (AuditLog $auditLog): array => [
                         'id' => $auditLog->id,
                         'action' => $auditLog->action,
-                        'actor_name' => $auditLog->actor?->name ?? 'Unknown',
+                        'actor_name' => $auditLog->actor?->name
+                            ?? (($auditLog->actor_type ?? 'system') === 'system' ? 'System' : 'Unknown'),
+                        'actor_type' => $auditLog->actor_type ?? 'system',
+                        'target_type' => $auditLog->target_type,
+                        'target_id' => $auditLog->target_id,
                         'created_at' => $auditLog->created_at?->toIso8601String(),
                         'metadata' => $auditLog->metadata ?? [],
                     ])

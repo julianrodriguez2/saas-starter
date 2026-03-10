@@ -6,8 +6,10 @@ use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Models\Plan;
 use App\Services\Admin\AdminOrganizationQueryService;
+use App\Services\AuditLogger;
 use App\Services\UsageAggregator;
 use App\Support\AdminImpersonation;
+use App\Support\AuditActions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -52,13 +54,22 @@ class AdminOrganizationController extends Controller
         ]);
     }
 
-    public function suspend(Request $request, Organization $organization): RedirectResponse
+    public function suspend(
+        Request $request,
+        Organization $organization,
+        AuditLogger $auditLogger
+    ): RedirectResponse
     {
         $validated = $request->validate([
             'reason' => ['required', 'string', 'max:2000'],
         ]);
 
-        $suspensionStatus = DB::transaction(function () use ($organization, $request, $validated): string {
+        $suspensionStatus = DB::transaction(function () use (
+            $organization,
+            $request,
+            $validated,
+            $auditLogger
+        ): string {
             $lockedOrganization = Organization::query()
                 ->whereKey($organization->id)
                 ->lockForUpdate()
@@ -72,13 +83,19 @@ class AdminOrganizationController extends Controller
             $lockedOrganization->save();
 
             if (! $alreadySuspended) {
-                $lockedOrganization->auditLogs()->create([
-                    'actor_id' => $request->user()->id,
-                    'action' => 'admin.organization.suspended',
-                    'metadata' => [
+                $auditLogger->logForOrganization(
+                    action: AuditActions::ORGANIZATION_SUSPENDED,
+                    organization: $lockedOrganization,
+                    actor: $request->user(),
+                    actorType: 'platform_admin',
+                    targetType: 'organization',
+                    targetId: $lockedOrganization->id,
+                    metadata: [
                         'reason' => $validated['reason'],
+                        'source' => 'admin.console',
                     ],
-                ]);
+                    request: $request
+                );
             }
 
             return $alreadySuspended ? 'already_suspended' : 'suspended';
@@ -91,9 +108,17 @@ class AdminOrganizationController extends Controller
         return redirect()->back()->with('success', 'Organization suspended.');
     }
 
-    public function unsuspend(Request $request, Organization $organization): RedirectResponse
+    public function unsuspend(
+        Request $request,
+        Organization $organization,
+        AuditLogger $auditLogger
+    ): RedirectResponse
     {
-        $wasSuspended = DB::transaction(function () use ($organization, $request): bool {
+        $wasSuspended = DB::transaction(function () use (
+            $organization,
+            $request,
+            $auditLogger
+        ): bool {
             $lockedOrganization = Organization::query()
                 ->whereKey($organization->id)
                 ->lockForUpdate()
@@ -110,13 +135,18 @@ class AdminOrganizationController extends Controller
             $lockedOrganization->suspension_reason = null;
             $lockedOrganization->save();
 
-            $lockedOrganization->auditLogs()->create([
-                'actor_id' => $request->user()->id,
-                'action' => 'admin.organization.unsuspended',
-                'metadata' => [
+            $auditLogger->logForOrganization(
+                action: AuditActions::ORGANIZATION_UNSUSPENDED,
+                organization: $lockedOrganization,
+                actor: $request->user(),
+                actorType: 'platform_admin',
+                targetType: 'organization',
+                targetId: $lockedOrganization->id,
+                metadata: [
                     'source' => 'admin.console',
                 ],
-            ]);
+                request: $request
+            );
 
             return true;
         });
@@ -128,18 +158,25 @@ class AdminOrganizationController extends Controller
         return redirect()->back()->with('success', 'Organization unsuspended.');
     }
 
-    public function impersonate(Request $request, Organization $organization): RedirectResponse
+    public function impersonate(
+        Request $request,
+        Organization $organization,
+        AuditLogger $auditLogger
+    ): RedirectResponse
     {
-        DB::transaction(function () use ($request, $organization): void {
-            $organization->auditLogs()->create([
-                'actor_id' => $request->user()->id,
-                'action' => 'admin.impersonation.started',
-                'metadata' => [
-                    'impersonating_admin_id' => $request->user()->id,
-                    'source' => 'admin.console',
-                ],
-            ]);
-        });
+        $auditLogger->logForOrganization(
+            action: AuditActions::ORGANIZATION_IMPERSONATION_STARTED,
+            organization: $organization,
+            actor: $request->user(),
+            actorType: 'platform_admin',
+            targetType: 'organization',
+            targetId: $organization->id,
+            metadata: [
+                'impersonating_admin_id' => $request->user()->id,
+                'source' => 'admin.console',
+            ],
+            request: $request
+        );
 
         AdminImpersonation::start($request, $request->user(), $organization);
 

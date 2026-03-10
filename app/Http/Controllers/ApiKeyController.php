@@ -6,6 +6,8 @@ use App\Http\Requests\StoreApiKeyRequest;
 use App\Models\ApiKey;
 use App\Models\Organization;
 use App\Services\ApiKeyService;
+use App\Services\AuditLogger;
+use App\Support\AuditActions;
 use App\Support\CurrentOrganization;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -54,7 +56,8 @@ class ApiKeyController extends Controller
     public function store(
         StoreApiKeyRequest $request,
         CurrentOrganization $currentOrganization,
-        ApiKeyService $apiKeyService
+        ApiKeyService $apiKeyService,
+        AuditLogger $auditLogger
     ): RedirectResponse {
         $organization = $this->resolveOrganization($currentOrganization);
 
@@ -86,15 +89,19 @@ class ApiKeyController extends Controller
         $apiKey = $created['apiKey'];
         $plainTextKey = $created['plainTextKey'];
 
-        $organization->auditLogs()->create([
-            'actor_id' => $request->user()->id,
-            'action' => 'api_key.created',
-            'metadata' => [
+        $auditLogger->logForOrganization(
+            action: AuditActions::API_KEY_CREATED,
+            organization: $organization,
+            actor: $request->user(),
+            targetType: 'api_key',
+            targetId: (string) $apiKey->id,
+            metadata: [
                 'api_key_id' => $apiKey->id,
                 'name' => $apiKey->name,
                 'key_prefix' => $apiKey->key_prefix,
             ],
-        ]);
+            request: $request
+        );
 
         return redirect()->route('settings.api-keys.index')
             ->with('success', 'API key created. Save it now, it will not be shown again.')
@@ -105,7 +112,8 @@ class ApiKeyController extends Controller
         Request $request,
         CurrentOrganization $currentOrganization,
         ApiKey $apiKey,
-        ApiKeyService $apiKeyService
+        ApiKeyService $apiKeyService,
+        AuditLogger $auditLogger
     ): RedirectResponse {
         $organization = $this->resolveOrganization($currentOrganization);
 
@@ -116,15 +124,19 @@ class ApiKeyController extends Controller
         $revoked = $apiKeyService->revoke($apiKey);
 
         if ($revoked) {
-            $organization->auditLogs()->create([
-                'actor_id' => $request->user()->id,
-                'action' => 'api_key.revoked',
-                'metadata' => [
+            $auditLogger->logForOrganization(
+                action: AuditActions::API_KEY_REVOKED,
+                organization: $organization,
+                actor: $request->user(),
+                targetType: 'api_key',
+                targetId: (string) $apiKey->id,
+                metadata: [
                     'api_key_id' => $apiKey->id,
                     'name' => $apiKey->name,
                     'key_prefix' => $apiKey->key_prefix,
                 ],
-            ]);
+                request: $request
+            );
 
             return redirect()->route('settings.api-keys.index')
                 ->with('success', 'API key revoked.');

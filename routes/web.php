@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminImpersonationController;
 use App\Http\Controllers\Admin\AdminOrganizationController;
 use App\Http\Controllers\ApiKeyController;
+use App\Http\Controllers\AuditLogController;
 use App\Http\Controllers\BillingController;
 use App\Http\Controllers\DeveloperApiDocsController;
 use App\Http\Controllers\OrganizationController;
@@ -107,6 +108,12 @@ Route::middleware(['auth', 'resolve.organization', 'org.role:admin'])->group(fun
 
     Route::post('/settings/api-keys/{apiKey}/revoke', [ApiKeyController::class, 'revoke'])
         ->name('settings.api-keys.revoke');
+
+    Route::get('/audit-logs', [AuditLogController::class, 'index'])
+        ->name('audit-logs.index');
+
+    Route::get('/audit-logs/{auditLog}', [AuditLogController::class, 'show'])
+        ->name('audit-logs.show');
 });
 
 Route::middleware(['auth', 'super.admin'])->group(function () {

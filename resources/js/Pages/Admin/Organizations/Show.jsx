@@ -17,6 +17,18 @@ const truncate = (value, max = 120) => {
     return value.length > max ? `${value.slice(0, max)}...` : value;
 };
 
+const formatTarget = (targetType, targetId) => {
+    if (!targetType && !targetId) {
+        return '-';
+    }
+
+    if (targetType && targetId) {
+        return `${targetType}:${targetId}`;
+    }
+
+    return targetType || targetId;
+};
+
 export default function AdminOrganizationShow({
     organizationDetail,
     isImpersonatingTarget,
@@ -333,6 +345,9 @@ export default function AdminOrganizationShow({
                                             Actor
                                         </th>
                                         <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-300">
+                                            Target
+                                        </th>
+                                        <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-300">
                                             Created
                                         </th>
                                         <th className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-300">
@@ -345,7 +360,7 @@ export default function AdminOrganizationShow({
                                     0 ? (
                                         <tr>
                                             <td
-                                                colSpan={4}
+                                                colSpan={5}
                                                 className="px-3 py-3 text-sm text-gray-500 dark:text-gray-400"
                                             >
                                                 No audit logs found.
@@ -359,7 +374,14 @@ export default function AdminOrganizationShow({
                                                         {auditLog.action}
                                                     </td>
                                                     <td className="px-3 py-2 text-sm text-gray-700 dark:text-gray-200">
-                                                        {auditLog.actor_name}
+                                                        {auditLog.actor_name}{' '}
+                                                        ({auditLog.actor_type || 'system'})
+                                                    </td>
+                                                    <td className="px-3 py-2 text-sm text-gray-700 dark:text-gray-200">
+                                                        {formatTarget(
+                                                            auditLog.target_type,
+                                                            auditLog.target_id,
+                                                        )}
                                                     </td>
                                                     <td className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
                                                         {formatDateTime(
