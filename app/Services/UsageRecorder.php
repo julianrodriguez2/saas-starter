@@ -135,6 +135,8 @@ class UsageRecorder
             });
         }
 
+        $this->usageAggregator->invalidateMonthlyUsage($organization);
+
         if ($dispatchProcessingJob) {
             ProcessUsageEvent::dispatch($usageEvent->id);
         }

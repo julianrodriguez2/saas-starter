@@ -13,6 +13,7 @@ use App\Http\Controllers\OrganizationMemberController;
 use App\Http\Controllers\OrganizationSettingsController;
 use App\Http\Controllers\OrganizationSwitchController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\SystemHealthController;
 use App\Http\Controllers\SystemEventDiagnosticsController;
 use App\Http\Controllers\StripeWebhookController;
 use App\Http\Controllers\UsageController;
@@ -83,30 +84,37 @@ Route::middleware(['auth', 'resolve.organization', 'org.role:admin'])->group(fun
         ->name('organizations.members.index');
 
     Route::post('/organizations/members/invite', [OrganizationMemberController::class, 'invite'])
+        ->middleware(['org.writable', 'throttle:org-member-invite'])
         ->name('organizations.members.invite');
 
     Route::delete('/organizations/members/{user}', [OrganizationMemberController::class, 'destroy'])
+        ->middleware('org.writable')
         ->name('organizations.members.destroy');
 
     Route::patch('/organizations/members/{user}/role', [OrganizationMemberController::class, 'updateRole'])
+        ->middleware('org.writable')
         ->name('organizations.members.update-role');
 
     Route::post('/billing/checkout/{plan}', [BillingController::class, 'checkout'])
+        ->middleware(['org.writable', 'throttle:org-billing-checkout'])
         ->name('billing.checkout');
 
     Route::post('/billing/portal', [BillingController::class, 'portal'])
         ->name('billing.portal');
 
     Route::post('/usage/test-record', [UsageController::class, 'testRecord'])
+        ->middleware('org.writable')
         ->name('usage.test-record');
 
     Route::get('/settings/api-keys', [ApiKeyController::class, 'index'])
         ->name('settings.api-keys.index');
 
     Route::post('/settings/api-keys', [ApiKeyController::class, 'store'])
+        ->middleware(['org.writable', 'throttle:org-api-key-create'])
         ->name('settings.api-keys.store');
 
     Route::post('/settings/api-keys/{apiKey}/revoke', [ApiKeyController::class, 'revoke'])
+        ->middleware('org.writable')
         ->name('settings.api-keys.revoke');
 
     Route::get('/audit-logs', [AuditLogController::class, 'index'])
@@ -117,6 +125,9 @@ Route::middleware(['auth', 'resolve.organization', 'org.role:admin'])->group(fun
 });
 
 Route::middleware(['auth', 'super.admin'])->group(function () {
+    Route::get('/system/health', SystemHealthController::class)
+        ->name('system.health');
+
     Route::get('/system/events', [SystemEventDiagnosticsController::class, 'index'])
         ->name('system.events.index');
 
@@ -154,6 +165,7 @@ Route::middleware(['auth', 'resolve.organization'])
     ->prefix('api/v1')
     ->group(function () {
         Route::post('/internal/usage-events', [UsageEventApiController::class, 'store'])
+            ->middleware('org.writable')
             ->name('api.v1.internal.usage-events.store');
 });
 

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\PlatformCacheService;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -9,6 +10,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Support\Facades\DB;
 use Laravel\Cashier\Billable;
 
 class Organization extends Model
@@ -49,6 +51,26 @@ class Organization extends Model
             $organization->plan_id = Plan::query()
                 ->where('name', 'Free')
                 ->value('id');
+        });
+
+        static::saved(function (Organization $organization): void {
+            $cache = app(PlatformCacheService::class);
+            $cache->forgetOrganization($organization->id);
+
+            foreach ($organization->cacheUserIds() as $userId) {
+                $cache->forgetOrganizationAccess($userId, $organization->id);
+                $cache->forgetUserOrganizations($userId);
+            }
+        });
+
+        static::deleted(function (Organization $organization): void {
+            $cache = app(PlatformCacheService::class);
+            $cache->forgetOrganization($organization->id);
+
+            foreach ($organization->cacheUserIds() as $userId) {
+                $cache->forgetOrganizationAccess($userId, $organization->id);
+                $cache->forgetUserOrganizations($userId);
+            }
         });
     }
 
@@ -131,5 +153,80 @@ class Organization extends Model
     public function stripeEmail(): ?string
     {
         return $this->owner?->email;
+    }
+
+    public function isSuspended(): bool
+    {
+        return (bool) $this->is_suspended;
+    }
+
+    public function hasActivePaidSubscription(): bool
+    {
+        return $this->subscriptions()
+            ->whereIn('stripe_status', ['trialing', 'active', 'past_due'])
+            ->exists();
+    }
+
+    public function isOnFreePlan(): bool
+    {
+        if ($this->plan_id === null) {
+            return true;
+        }
+
+        if ($this->relationLoaded('plan')) {
+            return strtolower((string) $this->plan?->name) === 'free';
+        }
+
+        return Plan::query()
+            ->whereKey($this->plan_id)
+            ->whereRaw('lower(name) = ?', ['free'])
+            ->exists();
+    }
+
+    public function isOnTrial(): bool
+    {
+        if ($this->trial_ends_at !== null && $this->trial_ends_at->isFuture()) {
+            return true;
+        }
+
+        return $this->subscriptions()
+            ->where('stripe_status', 'trialing')
+            ->exists();
+    }
+
+    public function canPerformWrites(): bool
+    {
+        if (! config('platform.suspension.block_writes', true)) {
+            return true;
+        }
+
+        return ! $this->isSuspended();
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function cacheUserIds(): array
+    {
+        $userIds = DB::table('organization_user')
+            ->where('organization_id', $this->id)
+            ->pluck('user_id')
+            ->map(static fn (mixed $value): int => (int) $value)
+            ->all();
+
+        if (is_numeric($this->owner_id)) {
+            $userIds[] = (int) $this->owner_id;
+        }
+
+        $originalOwnerId = $this->getOriginal('owner_id');
+
+        if (is_numeric($originalOwnerId)) {
+            $userIds[] = (int) $originalOwnerId;
+        }
+
+        return array_values(array_unique(array_filter(
+            $userIds,
+            static fn (int $userId): bool => $userId > 0
+        )));
     }
 }

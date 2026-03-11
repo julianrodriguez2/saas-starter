@@ -20,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'resolve.organization' => \App\Http\Middleware\ResolveOrganizationFromSession::class,
             'org.role' => \App\Http\Middleware\EnsureOrganizationRole::class,
+            'org.writable' => \App\Http\Middleware\EnsureOrganizationCanWrite::class,
             'super.admin' => \App\Http\Middleware\EnsureSuperAdmin::class,
             'auth.org_api_key' => \App\Http\Middleware\AuthenticateOrganizationApiKey::class,
         ]);

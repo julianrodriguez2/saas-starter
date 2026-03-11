@@ -21,13 +21,32 @@ class ProcessUsageEvent implements ShouldQueue
 
     private const IDEMPOTENCY_SCOPE = 'usage.job';
 
-    public int $tries = 3;
+    public int $tries;
 
-    public int $backoff = 30;
+    public int $timeout;
 
     public function __construct(
         public readonly int $usageEventId
     ) {
+        $this->tries = max((int) config('platform.queue.process_usage_event.tries', 3), 1);
+        $this->timeout = max((int) config('platform.queue.process_usage_event.timeout_seconds', 60), 1);
+    }
+
+    /**
+     * @return list<int>
+     */
+    public function backoff(): array
+    {
+        $configuredBackoff = config('platform.queue.process_usage_event.backoff_seconds', [30, 60, 120]);
+
+        if (! is_array($configuredBackoff) || $configuredBackoff === []) {
+            return [30, 60, 120];
+        }
+
+        return array_values(array_map(
+            static fn (mixed $seconds): int => max((int) $seconds, 1),
+            $configuredBackoff
+        ));
     }
 
     public function handle(
@@ -71,17 +90,21 @@ class ProcessUsageEvent implements ShouldQueue
                 ]
             );
         } catch (Throwable $exception) {
-            $domainEventFailureService->recordFailure(
-                source: 'usage_job',
-                eventKey: $idempotencyKey,
-                eventType: $usageEvent->event_type,
-                payload: [
-                    'usage_event_id' => $usageEvent->id,
-                    'organization_id' => $usageEvent->organization_id,
-                    'quantity' => $usageEvent->quantity,
-                ],
-                error: $exception
-            );
+            if ($this->attempts() >= $this->tries) {
+                $domainEventFailureService->recordFailure(
+                    source: 'usage_job',
+                    eventKey: $idempotencyKey,
+                    eventType: $usageEvent->event_type,
+                    payload: [
+                        'usage_event_id' => $usageEvent->id,
+                        'organization_id' => $usageEvent->organization_id,
+                        'quantity' => $usageEvent->quantity,
+                        'attempt' => $this->attempts(),
+                        'tries' => $this->tries,
+                    ],
+                    error: $exception
+                );
+            }
 
             throw $exception;
         }

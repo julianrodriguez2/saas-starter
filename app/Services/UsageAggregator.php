@@ -9,6 +9,11 @@ use Illuminate\Support\Str;
 
 class UsageAggregator
 {
+    public function __construct(
+        private readonly PlatformCacheService $platformCacheService
+    ) {
+    }
+
     public function getMonthlyUsage(
         Organization $organization,
         string $eventType,
@@ -20,13 +25,9 @@ class UsageAggregator
             return 0;
         }
 
-        [$start, $end] = $this->monthBounds($month);
+        $usage = $this->getAllMonthlyUsage($organization, $month);
 
-        return (int) UsageEvent::query()
-            ->where('organization_id', $organization->id)
-            ->where('event_type', $eventType)
-            ->whereBetween('recorded_at', [$start, $end])
-            ->sum('quantity');
+        return (int) ($usage[$eventType] ?? 0);
     }
 
     /**
@@ -35,15 +36,29 @@ class UsageAggregator
     public function getAllMonthlyUsage(Organization $organization, ?Carbon $month = null): array
     {
         [$start, $end] = $this->monthBounds($month);
+        $monthKey = $start->format('Y-m');
 
-        return UsageEvent::query()
-            ->where('organization_id', $organization->id)
-            ->whereBetween('recorded_at', [$start, $end])
-            ->selectRaw('event_type, SUM(quantity) as total_quantity')
-            ->groupBy('event_type')
-            ->pluck('total_quantity', 'event_type')
-            ->map(fn (mixed $total): int => (int) $total)
-            ->all();
+        return $this->platformCacheService->rememberMonthlyUsage(
+            organizationId: $organization->id,
+            monthKey: $monthKey,
+            resolver: function () use ($organization, $start, $end): array {
+                return UsageEvent::query()
+                    ->where('organization_id', $organization->id)
+                    ->whereBetween('recorded_at', [$start, $end])
+                    ->selectRaw('event_type, SUM(quantity) as total_quantity')
+                    ->groupBy('event_type')
+                    ->pluck('total_quantity', 'event_type')
+                    ->map(fn (mixed $total): int => (int) $total)
+                    ->all();
+            }
+        );
+    }
+
+    public function invalidateMonthlyUsage(Organization $organization, ?Carbon $month = null): void
+    {
+        $referenceMonth = ($month ?? now())->copy();
+
+        $this->platformCacheService->forgetMonthlyUsage($organization->id, $referenceMonth);
     }
 
     /**

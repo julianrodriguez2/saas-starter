@@ -3,14 +3,21 @@
 namespace App\Http\Middleware;
 
 use App\Models\Organization;
+use App\Services\PlatformCacheService;
 use App\Support\AdminImpersonation;
 use App\Support\CurrentOrganization;
 use Closure;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpFoundation\Response;
 
 class ResolveOrganizationFromSession
 {
+    public function __construct(
+        private readonly PlatformCacheService $platformCacheService
+    ) {
+    }
+
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
@@ -38,25 +45,42 @@ class ResolveOrganizationFromSession
             return redirect()->route('organizations.create');
         }
 
-        if ($isSuperAdminImpersonating) {
-            $organization = Organization::query()
-                ->whereKey($organizationId)
-                ->first();
-        } else {
-            $userId = $user->getKey();
+        $organizationSummary = null;
 
-            $organization = Organization::query()
-                ->whereKey($organizationId)
-                ->where(function ($query) use ($userId) {
-                    $query->where('owner_id', $userId)
-                        ->orWhereHas('users', function ($userQuery) use ($userId) {
-                            $userQuery->where('users.id', $userId);
-                        });
-                })
-                ->first();
+        if ($isSuperAdminImpersonating) {
+            $organizationSummary = $this->resolveOrganizationSummary($organizationId);
+        } else {
+            $userId = (int) $user->getKey();
+            $canAccessOrganization = $this->platformCacheService->rememberOrganizationAccess(
+                userId: $userId,
+                organizationId: $organizationId,
+                resolver: function () use ($organizationId, $userId): bool {
+                    $isOwner = Organization::query()
+                        ->whereKey($organizationId)
+                        ->where('owner_id', $userId)
+                        ->exists();
+
+                    if ($isOwner) {
+                        return true;
+                    }
+
+                    return DB::table('organization_user')
+                        ->where('organization_id', $organizationId)
+                        ->where('user_id', $userId)
+                        ->exists();
+                }
+            );
+
+            if ($canAccessOrganization) {
+                $organizationSummary = $this->resolveOrganizationSummary($organizationId);
+
+                if ($organizationSummary === null) {
+                    $this->platformCacheService->forgetOrganizationAccess($userId, $organizationId);
+                }
+            }
         }
 
-        if ($organization === null) {
+        if (! is_array($organizationSummary)) {
             $request->session()->forget('organization_id');
             AdminImpersonation::clear($request);
 
@@ -74,6 +98,7 @@ class ResolveOrganizationFromSession
             abort(403);
         }
 
+        $organization = $this->platformCacheService->hydrateOrganizationFromSummary($organizationSummary);
         $currentOrganization = new CurrentOrganization($organization);
 
         app()->instance(CurrentOrganization::class, $currentOrganization);
@@ -82,5 +107,40 @@ class ResolveOrganizationFromSession
         $request->attributes->set('currentOrganization', $organization);
 
         return $next($request);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private function resolveOrganizationSummary(string $organizationId): ?array
+    {
+        return $this->platformCacheService->rememberOrganizationSummary(
+            $organizationId,
+            function () use ($organizationId): ?array {
+                $organization = Organization::query()
+                    ->whereKey($organizationId)
+                    ->first([
+                        'id',
+                        'name',
+                        'owner_id',
+                        'plan_id',
+                        'trial_ends_at',
+                        'is_suspended',
+                        'suspended_at',
+                        'suspension_reason',
+                        'stripe_id',
+                        'stripe_customer_id',
+                        'stripe_subscription_id',
+                        'created_at',
+                        'updated_at',
+                    ]);
+
+                if ($organization === null) {
+                    return null;
+                }
+
+                return $organization->getAttributes();
+            }
+        );
     }
 }

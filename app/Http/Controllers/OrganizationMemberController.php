@@ -3,12 +3,15 @@
 namespace App\Http\Controllers;
 
 use App\Exceptions\EntitlementLimitExceededException;
+use App\Http\Requests\Organization\InviteOrganizationMemberRequest;
+use App\Http\Requests\Organization\UpdateOrganizationMemberRoleRequest;
 use App\Models\Invite;
 use App\Models\Organization;
 use App\Models\OrganizationUser;
 use App\Models\User;
 use App\Services\AuditLogger;
 use App\Services\EntitlementService;
+use App\Services\PlatformCacheService;
 use App\Support\AuditActions;
 use App\Support\CurrentOrganization;
 use Illuminate\Http\RedirectResponse;
@@ -16,14 +19,17 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 use InvalidArgumentException;
 
 class OrganizationMemberController extends Controller
 {
-    public function index(Request $request, CurrentOrganization $currentOrganization): Response
+    public function index(
+        Request $request,
+        CurrentOrganization $currentOrganization,
+        PlatformCacheService $platformCacheService
+    ): Response
     {
         $organization = $this->resolveOrganization($currentOrganization);
 
@@ -55,11 +61,17 @@ class OrganizationMemberController extends Controller
             ]);
         }
 
+        $memberCount = $platformCacheService->rememberOrganizationMemberCount(
+            $organization->id,
+            fn (): int => $this->currentMemberCount($organization)
+        );
+
         return Inertia::render('Organizations/Members', [
             'membersOrganization' => [
                 'id' => $organization->id,
                 'name' => $organization->name,
             ],
+            'memberCount' => $memberCount,
             'currentUserRole' => $request->user()->roleInOrganization($organization),
             'members' => $members
                 ->sortBy('name')
@@ -78,26 +90,18 @@ class OrganizationMemberController extends Controller
     }
 
     public function invite(
-        Request $request,
+        InviteOrganizationMemberRequest $request,
         CurrentOrganization $currentOrganization,
         EntitlementService $entitlementService,
-        AuditLogger $auditLogger
+        AuditLogger $auditLogger,
+        PlatformCacheService $platformCacheService
     ): RedirectResponse
     {
         $organization = $this->resolveOrganization($currentOrganization);
 
         Gate::authorize('manageMembers', $organization);
 
-        if ($organization->is_suspended) {
-            return redirect()->back()
-                ->withErrors(['organization' => 'Organization is suspended.'])
-                ->with('error', 'Organization is suspended.');
-        }
-
-        $validated = $request->validate([
-            'email' => ['required', 'email'],
-            'role' => ['required', Rule::in([OrganizationUser::ROLE_ADMIN, OrganizationUser::ROLE_MEMBER])],
-        ]);
+        $validated = $request->validated();
 
         $actor = $request->user();
         $email = Str::lower($validated['email']);
@@ -160,6 +164,7 @@ class OrganizationMemberController extends Controller
                         'message' => 'Member added to organization.',
                         'target_type' => 'user',
                         'target_id' => (string) $existingUser->id,
+                        'user_id' => $existingUser->id,
                         'email' => $existingUser->email,
                         'role' => $role,
                     ];
@@ -178,6 +183,7 @@ class OrganizationMemberController extends Controller
                     'message' => 'Invitation created.',
                     'target_type' => 'invite',
                     'target_id' => (string) $invite->id,
+                    'user_id' => null,
                     'email' => $email,
                     'role' => $role,
                 ];
@@ -205,6 +211,16 @@ class OrganizationMemberController extends Controller
             request: $request
         );
 
+        $platformCacheService->forgetOrganization($organization->id);
+        $platformCacheService->forgetOrganizationAccess((int) $actor->id, $organization->id);
+        $platformCacheService->forgetUserOrganizations((int) $actor->id);
+
+        if (is_numeric($inviteOutcome['user_id'] ?? null)) {
+            $targetUserId = (int) $inviteOutcome['user_id'];
+            $platformCacheService->forgetOrganizationAccess($targetUserId, $organization->id);
+            $platformCacheService->forgetUserOrganizations($targetUserId);
+        }
+
         return redirect()->back()->with('status', $inviteOutcome['message']);
     }
 
@@ -212,7 +228,8 @@ class OrganizationMemberController extends Controller
         Request $request,
         CurrentOrganization $currentOrganization,
         User $user,
-        AuditLogger $auditLogger
+        AuditLogger $auditLogger,
+        PlatformCacheService $platformCacheService
     ): RedirectResponse {
         $organization = $this->resolveOrganization($currentOrganization);
 
@@ -244,6 +261,12 @@ class OrganizationMemberController extends Controller
                 request: $request
             );
 
+            $platformCacheService->forgetOrganization($organization->id);
+            $platformCacheService->forgetOrganizationAccess((int) $actor->id, $organization->id);
+            $platformCacheService->forgetOrganizationAccess($user->id, $organization->id);
+            $platformCacheService->forgetUserOrganizations((int) $actor->id);
+            $platformCacheService->forgetUserOrganizations($user->id);
+
             return redirect()->back()->with('status', 'Member removed.');
         }
 
@@ -266,6 +289,12 @@ class OrganizationMemberController extends Controller
                 request: $request
             );
 
+            $platformCacheService->forgetOrganization($organization->id);
+            $platformCacheService->forgetOrganizationAccess((int) $actor->id, $organization->id);
+            $platformCacheService->forgetOrganizationAccess($user->id, $organization->id);
+            $platformCacheService->forgetUserOrganizations((int) $actor->id);
+            $platformCacheService->forgetUserOrganizations($user->id);
+
             return redirect()->back()->with('status', 'Member removed.');
         }
 
@@ -273,18 +302,17 @@ class OrganizationMemberController extends Controller
     }
 
     public function updateRole(
-        Request $request,
+        UpdateOrganizationMemberRoleRequest $request,
         CurrentOrganization $currentOrganization,
         User $user,
-        AuditLogger $auditLogger
+        AuditLogger $auditLogger,
+        PlatformCacheService $platformCacheService
     ): RedirectResponse {
         $organization = $this->resolveOrganization($currentOrganization);
 
         Gate::authorize('manageMembers', $organization);
 
-        $validated = $request->validate([
-            'role' => ['required', Rule::in([OrganizationUser::ROLE_ADMIN, OrganizationUser::ROLE_MEMBER])],
-        ]);
+        $validated = $request->validated();
 
         if (! $user->belongsToOrganization($organization)) {
             abort(404);
@@ -314,6 +342,12 @@ class OrganizationMemberController extends Controller
                 request: $request
             );
 
+            $platformCacheService->forgetOrganization($organization->id);
+            $platformCacheService->forgetOrganizationAccess((int) $actor->id, $organization->id);
+            $platformCacheService->forgetOrganizationAccess($user->id, $organization->id);
+            $platformCacheService->forgetUserOrganizations((int) $actor->id);
+            $platformCacheService->forgetUserOrganizations($user->id);
+
             return redirect()->back()->with('status', 'Member role updated.');
         }
 
@@ -336,6 +370,12 @@ class OrganizationMemberController extends Controller
                 ],
                 request: $request
             );
+
+            $platformCacheService->forgetOrganization($organization->id);
+            $platformCacheService->forgetOrganizationAccess((int) $actor->id, $organization->id);
+            $platformCacheService->forgetOrganizationAccess($user->id, $organization->id);
+            $platformCacheService->forgetUserOrganizations((int) $actor->id);
+            $platformCacheService->forgetUserOrganizations($user->id);
 
             return redirect()->back()->with('status', 'Member role updated.');
         }

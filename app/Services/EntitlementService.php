@@ -4,13 +4,18 @@ namespace App\Services;
 
 use App\Exceptions\EntitlementLimitExceededException;
 use App\Models\Organization;
+use App\Models\Plan;
 
 class EntitlementService
 {
+    public function __construct(
+        private readonly PlatformCacheService $platformCacheService
+    ) {
+    }
+
     public function getLimit(Organization $organization, string $feature): mixed
     {
-        $plan = $organization->plan;
-        $limits = is_array($plan?->limits) ? $plan->limits : [];
+        $limits = $this->resolvePlanLimits($organization);
 
         return $limits[$feature] ?? null;
     }
@@ -56,5 +61,43 @@ class EntitlementService
                 limit: (float) $limit
             );
         }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolvePlanLimits(Organization $organization): array
+    {
+        $planId = $this->resolvePlanId($organization);
+
+        if ($planId === null) {
+            return [];
+        }
+
+        return $this->platformCacheService->rememberPlanLimits(
+            $planId,
+            static function () use ($planId): array {
+                $limits = Plan::query()
+                    ->whereKey($planId)
+                    ->value('limits');
+
+                return is_array($limits) ? $limits : [];
+            }
+        );
+    }
+
+    private function resolvePlanId(Organization $organization): ?int
+    {
+        $planId = $organization->plan_id;
+
+        if (is_numeric($planId)) {
+            return (int) $planId;
+        }
+
+        $resolvedPlanId = Organization::query()
+            ->whereKey($organization->id)
+            ->value('plan_id');
+
+        return is_numeric($resolvedPlanId) ? (int) $resolvedPlanId : null;
     }
 }

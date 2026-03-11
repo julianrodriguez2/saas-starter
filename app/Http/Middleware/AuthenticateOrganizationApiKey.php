@@ -31,13 +31,6 @@ class AuthenticateOrganizationApiKey
 
         $organization = $apiKey->organization;
 
-        if ($organization->is_suspended) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Organization is suspended.',
-            ], 403);
-        }
-
         $this->apiKeyService->touchLastUsed($apiKey);
 
         $currentApiOrganization = new CurrentApiOrganization($organization, $apiKey);

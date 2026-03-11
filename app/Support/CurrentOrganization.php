@@ -12,10 +12,19 @@ class CurrentOrganization
     }
 
     /**
-     * @return array{id: string, name: string}|null
+     * @return array{id: string, name: string, is_suspended: bool, can_write: bool}|null
      */
     public function toArray(): ?array
     {
-        return $this->organization?->only(['id', 'name']);
+        if ($this->organization === null) {
+            return null;
+        }
+
+        return [
+            'id' => $this->organization->id,
+            'name' => $this->organization->name,
+            'is_suspended' => (bool) $this->organization->is_suspended,
+            'can_write' => $this->organization->canPerformWrites(),
+        ];
     }
 }

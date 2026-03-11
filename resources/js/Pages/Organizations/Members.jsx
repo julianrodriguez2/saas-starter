@@ -8,6 +8,7 @@ import { useState } from 'react';
 
 export default function Members({
     membersOrganization,
+    memberCount,
     members,
     invites,
     currentUserRole,
@@ -126,6 +127,9 @@ export default function Members({
                         <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">
                             Organization Members
                         </h3>
+                        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+                            Total members: {memberCount ?? members.length}
+                        </p>
                         <div className="mt-4 overflow-x-auto">
                             <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
                                 <thead>

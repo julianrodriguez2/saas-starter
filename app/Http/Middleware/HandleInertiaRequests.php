@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\Organization;
+use App\Services\PlatformCacheService;
 use App\Support\AdminImpersonation;
 use App\Support\CurrentOrganization;
 use Illuminate\Http\Request;
@@ -33,49 +34,62 @@ class HandleInertiaRequests extends Middleware
     public function share(Request $request): array
     {
         $user = $request->user();
+        $platformCacheService = app(PlatformCacheService::class);
         $currentOrganization = app()->bound(CurrentOrganization::class)
             ? app(CurrentOrganization::class)
             : new CurrentOrganization();
-        $currentOrganizationPayload = $currentOrganization->toArray();
-
-        if ($currentOrganizationPayload !== null && $user !== null) {
-            $currentOrganizationPayload['role'] = $user->roleInOrganization(
-                $currentOrganization->organization
-            );
-        }
 
         if ($user === null) {
             $organizations = [];
         } else {
-            $memberOrganizations = $user
-                ->organizations()
-                ->select('organizations.id', 'organizations.name')
-                ->get()
-                ->mapWithKeys(fn (Organization $organization): array => [
-                    $organization->id => [
-                        'id' => $organization->id,
-                        'name' => $organization->name,
-                        'role' => $organization->pivot?->role ?? 'member',
-                    ],
-                ]);
+            $organizations = $platformCacheService->rememberUserOrganizations(
+                (int) $user->getKey(),
+                function () use ($user): array {
+                    $memberOrganizations = $user
+                        ->organizations()
+                        ->select('organizations.id', 'organizations.name')
+                        ->get()
+                        ->mapWithKeys(fn (Organization $organization): array => [
+                            $organization->id => [
+                                'id' => $organization->id,
+                                'name' => $organization->name,
+                                'role' => $organization->pivot?->role ?? 'member',
+                            ],
+                        ]);
 
-            $ownedOrganizations = $user
-                ->ownedOrganizations()
-                ->select('organizations.id', 'organizations.name')
-                ->get()
-                ->mapWithKeys(fn (Organization $organization): array => [
-                    $organization->id => [
-                        'id' => $organization->id,
-                        'name' => $organization->name,
-                        'role' => 'owner',
-                    ],
-                ]);
+                    $ownedOrganizations = $user
+                        ->ownedOrganizations()
+                        ->select('organizations.id', 'organizations.name')
+                        ->get()
+                        ->mapWithKeys(fn (Organization $organization): array => [
+                            $organization->id => [
+                                'id' => $organization->id,
+                                'name' => $organization->name,
+                                'role' => 'owner',
+                            ],
+                        ]);
 
-            $organizations = $memberOrganizations
-                ->union($ownedOrganizations)
-                ->sortBy('name')
-                ->values()
-                ->all();
+                    return $memberOrganizations
+                        ->union($ownedOrganizations)
+                        ->sortBy('name')
+                        ->values()
+                        ->all();
+                }
+            );
+        }
+
+        $currentOrganizationPayload = $currentOrganization->toArray();
+
+        if ($currentOrganizationPayload !== null && $user !== null) {
+            $currentOrganizationEntry = collect($organizations)
+                ->firstWhere('id', $currentOrganizationPayload['id']);
+            $currentRole = is_array($currentOrganizationEntry)
+                ? ($currentOrganizationEntry['role'] ?? null)
+                : null;
+
+            $currentOrganizationPayload['role'] = is_string($currentRole) && $currentRole !== ''
+                ? $currentRole
+                : $user->roleInOrganization($currentOrganization->organization);
         }
 
         $isSuperAdmin = $user?->isSuperAdmin() ?? false;

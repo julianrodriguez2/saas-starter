@@ -17,6 +17,7 @@ use Inertia\Inertia;
 use Inertia\Response;
 use RuntimeException;
 use Symfony\Component\HttpFoundation\Response as HttpResponse;
+use Throwable;
 
 class BillingController extends Controller
 {
@@ -60,7 +61,7 @@ class BillingController extends Controller
                 ])
                 ->values()
                 ->all(),
-            'hasPaidSubscription' => in_array($subscriptionStatus, ['trialing', 'active', 'past_due'], true),
+            'hasPaidSubscription' => $organization->hasActivePaidSubscription(),
             'hasStripeCustomer' => filled($organization->stripe_id) || filled($organization->stripe_customer_id),
         ]);
     }
@@ -73,14 +74,6 @@ class BillingController extends Controller
     ): HttpResponse|RedirectResponse {
         $organization = $this->resolveOrganization($currentOrganization);
 
-        if ($organization->is_suspended) {
-            return redirect()->route('billing.index')
-                ->withErrors([
-                    'organization' => 'Organization is suspended.',
-                ])
-                ->with('error', 'Organization is suspended.');
-        }
-
         $targetPlan = $this->resolvePaidPlan($plan);
 
         if ($targetPlan === null || blank($targetPlan->stripe_price_id)) {
@@ -89,12 +82,24 @@ class BillingController extends Controller
             ]);
         }
 
-        if ($this->hasPaidSubscription($organization)) {
+        if ($organization->hasActivePaidSubscription()) {
             return redirect()->route('billing.index')
                 ->with('warning', 'Organization already has an active paid subscription.');
         }
 
-        $organization->createOrGetStripeCustomer();
+        try {
+            $organization->createOrGetStripeCustomer();
+        } catch (Throwable $exception) {
+            report($exception);
+
+            $message = 'Unable to start checkout right now. Please try again.';
+
+            return redirect()->route('billing.index')
+                ->withErrors([
+                    'billing' => $message,
+                ])
+                ->with('error', $message);
+        }
 
         try {
             $organization = DB::transaction(function () use ($organization): Organization {
@@ -103,7 +108,7 @@ class BillingController extends Controller
                     ->lockForUpdate()
                     ->firstOrFail();
 
-                if ($this->hasPaidSubscription($lockedOrganization)) {
+                if ($lockedOrganization->hasActivePaidSubscription()) {
                     throw new RuntimeException('Organization already has an active paid subscription.');
                 }
 
@@ -135,15 +140,27 @@ class BillingController extends Controller
             request: $request
         );
 
-        return $organization->newSubscription('default', $targetPlan->stripe_price_id)->checkout([
-            'success_url' => route('billing.checkout.success'),
-            'cancel_url' => route('billing.checkout.cancel'),
-            'client_reference_id' => $organization->id,
-            'metadata' => [
-                'organization_id' => $organization->id,
-                'target_plan' => $targetPlan->name,
-            ],
-        ]);
+        try {
+            return $organization->newSubscription('default', $targetPlan->stripe_price_id)->checkout([
+                'success_url' => route('billing.checkout.success'),
+                'cancel_url' => route('billing.checkout.cancel'),
+                'client_reference_id' => $organization->id,
+                'metadata' => [
+                    'organization_id' => $organization->id,
+                    'target_plan' => $targetPlan->name,
+                ],
+            ]);
+        } catch (Throwable $exception) {
+            report($exception);
+
+            $message = 'Unable to create checkout session right now.';
+
+            return redirect()->route('billing.index')
+                ->withErrors([
+                    'billing' => $message,
+                ])
+                ->with('error', $message);
+        }
     }
 
     public function portal(
@@ -173,7 +190,19 @@ class BillingController extends Controller
             request: $request
         );
 
-        return $organization->redirectToBillingPortal(route('billing.index'));
+        try {
+            return $organization->redirectToBillingPortal(route('billing.index'));
+        } catch (Throwable $exception) {
+            report($exception);
+
+            $message = 'Unable to open billing portal right now.';
+
+            return redirect()->route('billing.index')
+                ->withErrors([
+                    'billing' => $message,
+                ])
+                ->with('error', $message);
+        }
     }
 
     public function checkoutSuccess(): RedirectResponse
@@ -262,10 +291,4 @@ class BillingController extends Controller
             ->get();
     }
 
-    private function hasPaidSubscription(Organization $organization): bool
-    {
-        return $organization->subscriptions()
-            ->whereIn('stripe_status', ['trialing', 'active', 'past_due'])
-            ->exists();
-    }
 }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\SuspendOrganizationRequest;
 use App\Models\Organization;
 use App\Models\Plan;
 use App\Services\Admin\AdminOrganizationQueryService;
@@ -55,14 +56,12 @@ class AdminOrganizationController extends Controller
     }
 
     public function suspend(
-        Request $request,
+        SuspendOrganizationRequest $request,
         Organization $organization,
         AuditLogger $auditLogger
     ): RedirectResponse
     {
-        $validated = $request->validate([
-            'reason' => ['required', 'string', 'max:2000'],
-        ]);
+        $validated = $request->validated();
 
         $suspensionStatus = DB::transaction(function () use (
             $organization,

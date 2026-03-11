@@ -63,14 +63,6 @@ class ApiKeyController extends Controller
 
         Gate::authorize('update', $organization);
 
-        if ($organization->is_suspended) {
-            return redirect()->route('settings.api-keys.index')
-                ->withErrors([
-                    'organization' => 'Organization is suspended.',
-                ])
-                ->with('error', 'Organization is suspended.');
-        }
-
         try {
             $created = $apiKeyService->createKey(
                 organization: $organization,
@@ -78,11 +70,15 @@ class ApiKeyController extends Controller
                 createdByUserId: $request->user()?->id
             );
         } catch (RuntimeException $exception) {
+            report($exception);
+
+            $message = 'Unable to create API key right now.';
+
             return redirect()->route('settings.api-keys.index')
                 ->withErrors([
-                    'name' => $exception->getMessage(),
+                    'name' => $message,
                 ])
-                ->with('error', $exception->getMessage());
+                ->with('error', $message);
         }
 
         /** @var ApiKey $apiKey */

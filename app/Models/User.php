@@ -103,7 +103,7 @@ class User extends Authenticatable
             return false;
         }
 
-        $superAdminEmails = config('admin.super_admin_emails', []);
+        $superAdminEmails = config('platform.super_admin_emails', config('admin.super_admin_emails', []));
 
         if (! is_array($superAdminEmails)) {
             return false;

@@ -12,6 +12,7 @@ export default function AuthenticatedLayout({ header, children }) {
     const organizations = organization?.all ?? [];
     const currentOrganization = organization?.current;
     const isImpersonating = Boolean(impersonation?.active);
+    const isOrganizationSuspended = Boolean(currentOrganization?.is_suspended);
     const canManageMembers =
         currentOrganization?.role === 'owner' ||
         currentOrganization?.role === 'admin' ||
@@ -103,6 +104,14 @@ export default function AuthenticatedLayout({ header, children }) {
                                             )}
                                         >
                                             Organizations
+                                        </NavLink>
+                                        <NavLink
+                                            href={route('system.health')}
+                                            active={route().current(
+                                                'system.health',
+                                            )}
+                                        >
+                                            System Health
                                         </NavLink>
                                         <NavLink
                                             href={route('system.events.index')}
@@ -329,6 +338,12 @@ export default function AuthenticatedLayout({ header, children }) {
                                     Organizations
                                 </ResponsiveNavLink>
                                 <ResponsiveNavLink
+                                    href={route('system.health')}
+                                    active={route().current('system.health')}
+                                >
+                                    System Health
+                                </ResponsiveNavLink>
+                                <ResponsiveNavLink
                                     href={route('system.events.index')}
                                     active={route().current('system.events.*')}
                                 >
@@ -402,6 +417,13 @@ export default function AuthenticatedLayout({ header, children }) {
                                 Stop Impersonation
                             </Link>
                         )}
+                    </div>
+                </div>
+            )}
+            {isOrganizationSuspended && (
+                <div className="border-b border-red-200 bg-red-50">
+                    <div className="mx-auto max-w-7xl px-4 py-2 text-sm font-medium text-red-800 sm:px-6 lg:px-8">
+                        Organization is suspended. Write actions are disabled.
                     </div>
                 </div>
             )}

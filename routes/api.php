@@ -8,6 +8,7 @@ Route::prefix('v1')
     ->middleware(['auth.org_api_key', 'throttle:organization-api'])
     ->group(function () {
         Route::post('/usage-events', [ApiUsageController::class, 'store'])
+            ->middleware('org.writable')
             ->name('api.v1.usage-events.store');
 
         Route::post('/entitlements/check', [ApiEntitlementController::class, 'check'])
