@@ -12,8 +12,17 @@ return new class extends Migration
      */
     public function up(): void
     {
-        DB::statement('ALTER TABLE audit_logs ALTER COLUMN organization_id DROP NOT NULL');
-        DB::statement('ALTER TABLE audit_logs ALTER COLUMN actor_id DROP NOT NULL');
+        $driver = DB::connection()->getDriverName();
+
+        if ($driver === 'pgsql') {
+            DB::statement('ALTER TABLE audit_logs ALTER COLUMN organization_id DROP NOT NULL');
+            DB::statement('ALTER TABLE audit_logs ALTER COLUMN actor_id DROP NOT NULL');
+        } else {
+            Schema::table('audit_logs', function (Blueprint $table) {
+                $table->uuid('organization_id')->nullable()->change();
+                $table->foreignId('actor_id')->nullable()->change();
+            });
+        }
 
         Schema::table('audit_logs', function (Blueprint $table) {
             $table->string('actor_type')

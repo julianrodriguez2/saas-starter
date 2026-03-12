@@ -2,7 +2,6 @@
 
 namespace Database\Seeders;
 
-use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -17,14 +16,13 @@ class DatabaseSeeder extends Seeder
     {
         $this->call([
             PlanSeeder::class,
-            // UsageEventDemoSeeder::class, // Optional: enable for local usage dashboard demo data.
         ]);
 
-        // User::factory(10)->create();
-
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
+        if ((bool) env('SEED_DEMO_DATA', false)) {
+            $this->call([
+                DemoDataSeeder::class,
+                UsageEventDemoSeeder::class,
+            ]);
+        }
     }
 }

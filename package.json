@@ -4,6 +4,7 @@
     "type": "module",
     "scripts": {
         "build": "vite build",
+        "build:ci": "vite build --mode production",
         "dev": "vite"
     },
     "devDependencies": {

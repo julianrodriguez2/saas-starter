@@ -16,6 +16,7 @@
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
+        "larastan/larastan": "^3.0",
         "laravel/breeze": "^2.3",
         "laravel/pail": "^1.2.2",
         "laravel/pint": "^1.24",
@@ -52,6 +53,23 @@
         "test": [
             "@php artisan config:clear --ansi",
             "@php artisan test"
+        ],
+        "test:coverage": [
+            "@php -d xdebug.mode=coverage artisan test --coverage"
+        ],
+        "lint": [
+            "@php vendor/bin/pint --test"
+        ],
+        "format": [
+            "@php vendor/bin/pint"
+        ],
+        "analyse": [
+            "@php vendor/bin/phpstan analyse --memory-limit=1G"
+        ],
+        "quality": [
+            "@composer lint",
+            "@composer analyse",
+            "@composer test"
         ],
         "post-autoload-dump": [
             "Illuminate\\Foundation\\ComposerScripts::postAutoloadDump",
